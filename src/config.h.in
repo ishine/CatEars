@@ -1,5 +1,14 @@
 /* src/config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* GEMM_ARCH */
+#undef GEMM_ARCH
+
+/* HASWELL */
+#undef GEMM_ARCH_HASWELL
+
+/* PENRYN */
+#undef GEMM_ARCH_PENRYN
+
 /* Name of package */
 #undef PACKAGE
 

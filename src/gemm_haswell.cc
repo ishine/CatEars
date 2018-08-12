@@ -627,7 +627,8 @@ void GEMM<float>::Kernel(
     float *a,
     float *b,
     float *beta,
-    float *c, int64_t rs_c, int64_t cs_c) {
+    float *c, int64_t rs_c, int64_t cs_c,
+    const float *, const float *) {
   bli_sgemm_asm_6x16(k, alpha, a, b, beta, c, rs_c, cs_c);
 }
 

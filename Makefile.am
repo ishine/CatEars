@@ -26,8 +26,14 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/pocketkaldi.cc \
                            src/hashtable.cc \
                            src/configuration.cc \
-                           src/gemm.cc \
-                           src/gemm_haswell.cc
+                           src/gemm.cc
+                           
+
+if ENABLE_AVX
+    libpocketkaldi_a_SOURCES += src/gemm_haswell.cc
+else 
+    libpocketkaldi_a_SOURCES += src/gemm_penryn.cc
+endif
 
 pocketkaldi_LDADD = libpocketkaldi.a -lstdc++
 

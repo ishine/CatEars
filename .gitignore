@@ -5,3 +5,4 @@ scripts/*
 m4/*
 build/*
 Makefile.in
+.vscode

@@ -35,15 +35,19 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
+#include <config.h>
 
 #ifndef POCKETKALDI_GEMM_H_
 #define POCKETKALDI_GEMM_H_
+
 
 namespace pocketkaldi {
 
 // Constants for fp32
 template<typename D>
 struct GEMMConst {};
+
+#if GEMM_ARCH == GEMM_ARCH_HASWELL
 template<>
 struct GEMMConst<float> {
   static constexpr int MC = 288;
@@ -52,6 +56,18 @@ struct GEMMConst<float> {
   static constexpr int MR = 6;
   static constexpr int NR = 16;
 };
+#elif GEMM_ARCH == GEMM_ARCH_PENRYN
+template<>
+struct GEMMConst<float> {
+  static constexpr int MC = 768;
+  static constexpr int KC = 384;
+  static constexpr int NC = 4096;
+  static constexpr int MR = 8;
+  static constexpr int NR = 4;
+};
+#else
+#error Unexpected GEMM_ARCH
+#endif 
 
 template<typename T>
 class GEMM {
@@ -126,7 +142,8 @@ class GEMM {
       T *a,
       T *b,
       T *beta,
-      T *c, int64_t rs_c, int64_t cs_c);
+      T *c, int64_t rs_c, int64_t cs_c,
+      const T *next_a, const T *next_b);
 };
 
 }  // namespace pocketkaldi

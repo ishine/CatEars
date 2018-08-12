@@ -263,11 +263,24 @@ void GEMM<T>::MacroKernel(
   int mr, nr;
   int i, j;
 
+  const T *next_a = nullptr;
+  const T *next_b = nullptr;
+
   for (j = 0; j < np; ++j) {
     nr = (j != np - 1 || _nr == 0) ? NR : _nr;
+    next_b = &B_[j * kc * NR];
 
     for (i = 0; i < mp; ++i) {
       mr = (i != mp - 1 || _mr == 0) ? MR : _mr;
+      next_a = &A_[(i + 1) * kc * MR];
+
+      if (i == mp - 1) {
+        next_a = A_;
+        next_b = &B_[(j + 1) * kc * NR];
+        if (j == np - 1) {
+            next_b = B_;
+        }
+      }
 
       if (mr == MR && nr == NR) {
         Kernel(
@@ -277,7 +290,8 @@ void GEMM<T>::MacroKernel(
           &B_[j * kc * NR],
           &beta,
           &C[i * MR * incRowC + j * NR * incColC],
-          incRowC, incColC);
+          incRowC, incColC,
+          next_a, next_b);
       } else {
         T zero_beta = 0.0;
         Kernel(
@@ -286,7 +300,8 @@ void GEMM<T>::MacroKernel(
             &A_[i * kc * MR],
             &B_[j * kc * NR],
             &zero_beta,
-            C_, 1, MR);
+            C_, 1, MR,
+            next_a, next_b);
         Gescal(
             mr, nr,
             beta,
