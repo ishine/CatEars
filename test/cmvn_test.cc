@@ -71,7 +71,7 @@ void TestOnlineCmvn() {
   for (int i = 0; i < fbank_feat.ncol; ++i) {
     cmvn.GetFrame(i, &feats);
     for (int d = 0; d < feats.dim; ++d) {
-      assert(feats.data[d] - corr[i * feats.dim + d] < 0.00001);
+      assert(feats.data[d] - corr[i * feats.dim + d] < 0.0001);
     }
   }
 

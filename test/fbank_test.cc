@@ -46,7 +46,7 @@ void TestFbank() {
   float val;
   int line_count = 0;
   for (int i = 0; is >> val; ++i) {
-    assert(abs(val - fbank_featvec[i]) < 1e-5);
+    assert(abs(val - fbank_featvec[i]) < 1e-4);
     ++line_count;
   }
   assert(line_count == 1880);

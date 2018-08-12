@@ -45,8 +45,7 @@ int main(int argc, char **argv) {
   std::string output_wspecifier = po.GetArg(2);
 
   // Initialize the fbank computer
-  pk_fbank_t fbank;
-  pk_fbank_init(&fbank);
+  pocketkaldi::Fbank fbank;
 
   SequentialTableReader<WaveHolder> reader(wav_rspecifier);
   BaseFloatMatrixWriter kaldi_writer;  // typedef to TableWriter<something>.
@@ -99,7 +98,7 @@ int main(int argc, char **argv) {
     pk_matrix_init(&feat, 0, 0);
     
     // Compute the fbank feature
-    pk_fbank_compute(&fbank, &wave, &feat);
+    fbank.Compute(&wave, &feat);
 
     // Store result from feat to features. pk_matrix_t in pocketkaldi is
     // stored by column while Matrix in kaldi is stored by row
@@ -124,8 +123,6 @@ int main(int argc, char **argv) {
   }
   KALDI_LOG << " Done " << num_success << " out of " << num_utts
             << " utterances.";
-
-  pk_fbank_destroy(&fbank);
 
   return 0;
 }

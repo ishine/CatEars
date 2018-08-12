@@ -32,10 +32,10 @@ libpocketkaldi_a_SOURCES = src/util.cc \
 pocketkaldi_LDADD = libpocketkaldi.a -lstdc++
 
 if ENABLE_TOOLS
+    AM_CXXFLAGS += -I$(KALDI_ROOT)/src -I$(KALDI_ROOT)/tools/openfst-1.6.5/include
     bin_PROGRAMS += compute_fbank extract_id2pdf
     compute_fbank_SOURCES = tool/compute_fbank.cc
     compute_fbank_LDADD = $(KALDI_ROOT)/src/util/kaldi-util.a \
-                          $(KALDI_ROOT)/src/thread/kaldi-thread.a \
                           $(KALDI_ROOT)/src/feat/kaldi-feat.a \
                           $(KALDI_ROOT)/src/matrix/kaldi-matrix.a \
                           $(KALDI_ROOT)/src/base/kaldi-base.a \
