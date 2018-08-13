@@ -8,29 +8,31 @@
 #include <fstream>
 #include <vector>
 #include "pcm_reader.h"
+#include "vector.h"
 #include "util.h"
 
 using pocketkaldi::Fbank;
+using pocketkaldi::Vector;
+using pocketkaldi::Read16kPcm;
+using pocketkaldi::Status;
 
 void TestFbank() {
   std::string wav_file = TESTDIR "data/en-us-hello.wav";
   std::string kaldi_featdump = TESTDIR "data/fbankmat_en-us-hello.wav.txt";
 
   // Read wave file
-  pk_status_t status;
-  pk_vector_t pcm_data;
+  Vector<float> pcm_data;
 
-  pk_status_init(&status);
-  pk_vector_init(&pcm_data, 0, NAN);
-  pk_16kpcm_read(wav_file.c_str(), &pcm_data, &status);
-  assert(status.ok);
+  Status status = Read16kPcm(wav_file.c_str(), &pcm_data);
+  puts(status.what().c_str());
+  assert(status.ok());
 
   // Calculate fbank feature
   Fbank fbank;
   pk_matrix_t fbank_feat;
   pk_matrix_init(&fbank_feat, 0, 0);
 
-  fbank.Compute(&pcm_data, &fbank_feat);
+  fbank.Compute(pcm_data, &fbank_feat);
   std::vector<float> fbank_featvec;
   for (int i = 0; i < fbank_feat.ncol; ++i) {
     pk_vector_t col = pk_matrix_getcol(&fbank_feat, i);
@@ -51,7 +53,6 @@ void TestFbank() {
   }
   assert(line_count == 1880);
 
-  pk_vector_destroy(&pcm_data);
   pk_matrix_destroy(&fbank_feat);
 }
 

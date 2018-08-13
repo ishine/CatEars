@@ -265,10 +265,9 @@ Fbank::Fbank() :
 }
 
 void Fbank::Compute(
-    const pk_vector_t *wave,
+    const VectorBase<float> &wave,
     pk_matrix_t *fbank_feature) {
-  SubVector<float> wave_data(wave->data, wave->dim);
-  int num_frames = CalcNumFrames(wave_data);
+  int num_frames = CalcNumFrames(wave);
   if (num_frames == 0) {
     pk_matrix_resize(fbank_feature, 0, 0);
   } else {
@@ -280,7 +279,7 @@ void Fbank::Compute(
                 buffer(frame_length_padded_, Vector<float>::kUndefined),
                 frame_feat(PK_FBANK_DIM, Vector<float>::kUndefined);
   for (int i = 0; i < num_frames; ++i) {
-    ExtractWindow(wave_data, i, window_function_, &window);
+    ExtractWindow(wave, i, window_function_, &window);
     ComputeFrame(&window, &frame_feat, &buffer);
 
     // Store the value back to frame

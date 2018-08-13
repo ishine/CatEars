@@ -282,7 +282,7 @@ std::string Tolower(const std::string &str) {
 }
 
 
-ReadableFile::ReadableFile(): fd_(nullptr) {
+ReadableFile::ReadableFile(): fd_(nullptr), file_size_(0) {
 }
 
 ReadableFile::~ReadableFile() {
@@ -295,9 +295,14 @@ Status ReadableFile::Open(const std::string &filename) {
   fd_ = fopen(filename.c_str(), "rb");
   if (fd_ == NULL) {
     return Status::IOError(util::Format("Unable to open {}", filename));
-  } else {
-    return Status::OK();
   }
+
+  // Get file size
+  fseek(fd_, 0, SEEK_END);
+  file_size_ = ftell(fd_);
+  fseek(fd_, 0, SEEK_SET);
+
+  return Status::OK();
 }
 
 bool ReadableFile::ReadLine(std::string *line, Status *status) {
@@ -362,6 +367,12 @@ bool ReadableFile::Eof() const {
 void ReadableFile::Close() {
   if (fd_ != nullptr) fclose(fd_);
   fd_ = nullptr;
+}
+
+void ToRawStatus(const Status &s, pk_status_t *cs) {
+  cs->errcode = s.code();
+  cs->ok = s.ok();
+  pk_strlcpy(cs->message, s.what().c_str(), PK_STATUS_MSGMAX);
 }
 
 }  // namespace util

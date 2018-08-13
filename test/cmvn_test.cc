@@ -12,6 +12,9 @@
 
 using pocketkaldi::Fbank;
 using pocketkaldi::CMVN;
+using pocketkaldi::Vector;
+using pocketkaldi::Read16kPcm;
+using pocketkaldi::Status;
 
 // Read a matrix from a text file and store them into mat. nrows is the rows of
 // mat
@@ -40,17 +43,16 @@ void TestOnlineCmvn() {
   pk_status_init(&status);
 
   // Read audio feats
-  pk_vector_t pcm_data;
-  pk_status_init(&status);
-  pk_vector_init(&pcm_data, 0, NAN);
-  pk_16kpcm_read(wav_file.c_str(), &pcm_data, &status);
-  assert(status.ok);
+  Vector<float> pcm_data;
+
+  Status s = Read16kPcm(wav_file.c_str(), &pcm_data);
+  assert(s.ok());
 
   // Computes fbank feature
   Fbank fbank;
   pk_matrix_t fbank_feat;
   pk_matrix_init(&fbank_feat, 0, 0);
-  fbank.Compute(&pcm_data, &fbank_feat);
+  fbank.Compute(pcm_data, &fbank_feat);
 
   // Read global stats from file
   pk_readable_t *fd = pk_readable_open(global_stats_path.c_str(), &status);
@@ -75,7 +77,6 @@ void TestOnlineCmvn() {
     }
   }
 
-  pk_vector_destroy(&pcm_data);
   pk_vector_destroy(&global_stats);
   pk_vector_destroy(&feats);
   pk_matrix_destroy(&fbank_feat);

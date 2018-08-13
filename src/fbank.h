@@ -50,7 +50,7 @@ class Fbank {
 
   // Computes the fbank feature from wave, and then stores the result into matrix
   // fbank_feature. Each row in fbank_feature represent a frame.
-  void Compute(const pk_vector_t *wave, pk_matrix_t *fbank_feature);
+  void Compute(const VectorBase<float> &wave, pk_matrix_t *fbank_feature);
 
  private:
   int frame_length_padded_;

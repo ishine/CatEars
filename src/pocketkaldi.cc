@@ -18,17 +18,20 @@
 #include "symbol_table.h"
 #include "pcm_reader.h"
 #include "configuration.h"
+#include "util.h"
 
 using pocketkaldi::Decoder;
 using pocketkaldi::Fbank;
 using pocketkaldi::CMVN;
+using pocketkaldi::util::ToRawStatus;
+using pocketkaldi::Status;
 
 PKLIST_DEFINE(char, byte_list)
 
 // The internal version of an utterance. It stores the intermediate state in
 // decoding.
 typedef struct pk_utterance_internal_t {
-  pk_vector_t raw_wave;
+  pocketkaldi::Vector<float> raw_wave;
 } pk_utterance_internal_t;
 
 void pk_init(pk_t *self) {
@@ -146,16 +149,13 @@ pk_load_failed:
 void pk_utterance_init(pk_utterance_t *utt) {
   utt->internal = (pk_utterance_internal_t *)malloc(
       sizeof(pk_utterance_internal_t));
-  pk_vector_init(&utt->internal->raw_wave, 0, NAN);
   utt->hyp = NULL;
   utt->loglikelihood_per_frame = 0.0f;
 }
 
 void pk_utterance_destroy(pk_utterance_t *utt) {
   if (utt->internal) {
-    pk_vector_destroy(&utt->internal->raw_wave);
-
-    free(utt->internal);
+    delete utt->internal;
     utt->internal = NULL;
   }
 
@@ -167,17 +167,19 @@ void pk_utterance_destroy(pk_utterance_t *utt) {
 void pk_read_audio(
     pk_utterance_t *utt,
     const char *filename,
-    pk_status_t *status) {
+    pk_status_t *cs) {
   assert(utt->internal && "pk_read_audio: utterance is not initialized");
 
-  pk_16kpcm_read(filename, &utt->internal->raw_wave, status);
+  pocketkaldi::Status status = pocketkaldi::Read16kPcm(
+      filename, &utt->internal->raw_wave);
+  ToRawStatus(status, cs);
 }
 
 void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
   assert(utt->hyp == NULL && "utt->hyp == NULL expected");
 
   // Handle empty utterance
-  if (utt->internal->raw_wave.dim == 0) {
+  if (utt->internal->raw_wave.Dim() == 0) {
     utt->hyp = (char *)malloc(sizeof(char));
     *(utt->hyp) = '\0';
     return;
@@ -189,7 +191,7 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
   t = clock();
   pk_matrix_t raw_feats;
   pk_matrix_init(&raw_feats, 0, 0);
-  recognizer->fbank->Compute(&utt->internal->raw_wave, &raw_feats);
+  recognizer->fbank->Compute(utt->internal->raw_wave, &raw_feats);
   t = clock() - t;
   fputs(pocketkaldi::util::Format("Fbank: {}ms\n", ((float)t) / CLOCKS_PER_SEC  * 1000).c_str(), stderr);
 

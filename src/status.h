@@ -56,7 +56,10 @@ class Status {
   }
 
   // Return true if the state is success
-  bool ok() { return code_ == 0; }
+  bool ok() const { return code_ == 0; }
+
+  // Return error code
+  int code() const { return code_; }
 
   // Return a string representation of what has happened. If the status
   // is success return a string with length 0

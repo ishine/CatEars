@@ -273,6 +273,11 @@ class ReadableFile {
     return filename_;
   }
 
+  // Return filesize
+  int64_t file_size() const {
+    return file_size_;
+  }
+
   // Close opened file
   void Close();
 
@@ -285,6 +290,7 @@ class ReadableFile {
  private:
   std::string filename_;
   FILE *fd_;
+  int64_t file_size_;
 };
 
 // To check if a class have 'previous' field
@@ -296,6 +302,9 @@ struct has_previous {
     value = (sizeof(check<T>(0)) == sizeof(int8_t))
   };
 };
+
+// Convert to C status
+void ToRawStatus(const Status &s, pk_status_t *cs);
 
 }  // namespace util
 }  // namespace pocketkaldi
