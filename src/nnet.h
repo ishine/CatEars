@@ -58,6 +58,29 @@ class LinearLayer : public Layer {
   Vector<float> b_;
 };
 
+// SpliceLayer splices input matrix with left and right context. For example
+// Input matrix is [v1, v2, v3, v4]
+// left_context = 2, right_context = 1
+// Output matrxi is:
+//    [[concat(v1, v1, v1, v2)],
+//     [concat(v1, v1, v2, v3)],
+//     [concat(v1, v2, v3, v4)],
+//     [concat(v2, v3, v4, v4)]]
+class SpliceLayer : public Layer {
+ public:
+  SpliceLayer(
+      int left_context,
+      int right_context);
+
+  void Propagate(
+      const MatrixBase<float> &in,
+      Matrix<float> *out) const override;
+
+ private:
+  int left_context_;
+  int right_context_;
+};
+
 // Softmax layer
 class SoftmaxLayer : public Layer {
  public:

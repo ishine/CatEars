@@ -11,6 +11,7 @@ using pocketkaldi::LinearLayer;
 using pocketkaldi::SoftmaxLayer;
 using pocketkaldi::ReLULayer;
 using pocketkaldi::NormalizeLayer;
+using pocketkaldi::SpliceLayer;
 using pocketkaldi::Matrix;
 using pocketkaldi::SubMatrix;
 using pocketkaldi::Vector;
@@ -18,6 +19,35 @@ using pocketkaldi::SubVector;
 
 bool CheckEq(float a, float b) {
   return fabs(a - b) < 1e-6;
+}
+
+// Checks if v has the same data as std:;vector ref
+bool CheckVector(const SubVector<float> &v, std::vector<float> ref) {
+  if (v.Dim() != static_cast<int>(ref.size())) return false;
+  for (int i = 0; i < v.Dim(); ++i) {
+    if (CheckEq(v(i), ref[i]) == false) return false;
+  }
+
+  return true;
+}
+
+void TestSpliceLayer() {
+  float x_data[] = {
+    1, 1,
+    2, 2,
+    3, 3
+  };
+
+  SubMatrix<float> x(x_data, 3, 2, 2);
+  SpliceLayer spliceLayer(2, 1);
+
+  Matrix<float> y;
+  spliceLayer.Propagate(x, &y);
+  // Check results
+  assert(y.NumCols() == 8 && y.NumRows() == 3);
+  assert(CheckVector(y.Row(0), {1, 1, 1, 1, 1, 1, 2, 2}));
+  assert(CheckVector(y.Row(1), {1, 1, 1, 1, 2, 2, 3, 3}));
+  assert(CheckVector(y.Row(2), {1, 1, 2, 2, 3, 3, 3, 3}));
 }
 
 void TestLinearLayer() {
@@ -114,5 +144,6 @@ int main() {
   TestSoftmaxLayer();
   TestReLULayer();
   TestNormalizeLayer();
+  TestSpliceLayer();
   return 0;
 }

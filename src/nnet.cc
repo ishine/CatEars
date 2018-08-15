@@ -35,6 +35,52 @@ void LinearLayer::Propagate(
   }
 }
 
+SpliceLayer::SpliceLayer(
+    int left_context,
+    int right_context) :
+        left_context_(left_context),
+        right_context_(right_context) {
+}
+
+void SpliceLayer::Propagate(
+    const MatrixBase<float> &in,
+    Matrix<float> *out) const {
+  if (in.NumRows() == 0 || in.NumCols() == 0) return;
+
+  int out_cols = (left_context_ + right_context_ + 1) * in.NumCols();
+  out->Resize(in.NumRows(), out_cols);
+
+  for (int row_idx = 0; row_idx < out->NumRows(); ++row_idx) {
+    SubVector<float> out_row = out->Row(row_idx);
+    int offset = 0;
+
+    // Left context
+    for (int c = left_context_; c > 0; --c) {
+      int cnt_idx = row_idx - c;
+      if (cnt_idx < 0) cnt_idx = 0;
+      SubVector<float> v = out_row.Range(offset, in.NumCols());
+      v.CopyFromVec(in.Row(cnt_idx));
+      offset += in.NumCols();
+    }
+
+    // Current index
+    SubVector<float> v = out_row.Range(offset, in.NumCols());
+    v.CopyFromVec(in.Row(row_idx));
+    offset += in.NumCols();
+
+    // Right context
+    for (int c = 1; c <= right_context_; ++c) {
+      int cnt_idx = row_idx + c;
+      if (cnt_idx > in.NumRows() - 1) cnt_idx = in.NumRows() - 1;
+      SubVector<float> v = out_row.Range(offset, in.NumCols());
+      v.CopyFromVec(in.Row(cnt_idx));
+      offset += in.NumCols();
+    }
+
+    assert(offset == out_cols && "splice: offset and size mismatch");
+  }
+}
+
 void SoftmaxLayer::Propagate(
     const MatrixBase<float> &in,
     Matrix<float> *out) const {
