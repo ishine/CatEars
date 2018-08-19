@@ -3,6 +3,7 @@
 #ifndef POCKETKALDI_NNET_H_
 #define POCKETKALDI_NNET_H_
 
+#include <vector>
 #include "matrix.h"
 #include "util.h"
 #include "gemm.h"
@@ -60,27 +61,24 @@ class LinearLayer : public Layer {
   Vector<float> b_;
 };
 
-// SpliceLayer splices input matrix with left and right context. For example
+// SpliceLayer splices input matrix with each indcies. For example
 // Input matrix is [v1, v2, v3, v4]
-// left_context = 2, right_context = 1
+// indcies: -2, 0, 1
 // Output matrxi is:
-//    [[concat(v1, v1, v1, v2)],
-//     [concat(v1, v1, v2, v3)],
-//     [concat(v1, v2, v3, v4)],
-//     [concat(v2, v3, v4, v4)]]
+//    [[concat(v1, v1, v2)],
+//     [concat(v1, v2, v3)],
+//     [concat(v1, v3, v4)],
+//     [concat(v2, v4, v4)]]
 class SpliceLayer : public Layer {
  public:
-  SpliceLayer(
-      int left_context,
-      int right_context);
+  SpliceLayer(const std::vector<int> &indices);
 
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
 
  private:
-  int left_context_;
-  int right_context_;
+  std::vector<int> indices_;
 };
 
 // BatchNormLayer is a layer to apply batch normalization without affine,

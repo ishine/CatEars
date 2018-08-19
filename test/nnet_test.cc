@@ -37,19 +37,22 @@ void TestSpliceLayer() {
   float x_data[] = {
     1, 1,
     2, 2,
-    3, 3
+    3, 3,
+    4, 4
   };
 
-  SubMatrix<float> x(x_data, 3, 2, 2);
-  SpliceLayer spliceLayer(2, 1);
+  SubMatrix<float> x(x_data, 4, 2, 2);
+  SpliceLayer spliceLayer({-2, 1});
 
   Matrix<float> y;
   spliceLayer.Propagate(x, &y);
+
   // Check results
-  assert(y.NumCols() == 8 && y.NumRows() == 3);
-  assert(CheckVector(y.Row(0), {1, 1, 1, 1, 1, 1, 2, 2}));
-  assert(CheckVector(y.Row(1), {1, 1, 1, 1, 2, 2, 3, 3}));
-  assert(CheckVector(y.Row(2), {1, 1, 2, 2, 3, 3, 3, 3}));
+  assert(y.NumCols() == 4 && y.NumRows() == 4);
+  assert(CheckVector(y.Row(0), {1, 1, 2, 2}));
+  assert(CheckVector(y.Row(1), {1, 1, 3, 3}));
+  assert(CheckVector(y.Row(2), {1, 1, 4, 4}));
+  assert(CheckVector(y.Row(3), {2, 2, 4, 4}));
 }
 
 void TestLinearLayer() {
