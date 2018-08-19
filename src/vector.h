@@ -208,6 +208,9 @@ class VectorBase {
   /// Applies floor to all elements. Returns number of elements floored.
   int ApplyFloor(Real floor_val);
 
+  // Take all  elements of vector to a power.
+  void ApplyPow(Real power);
+
   /// Apply soft-max to vector and return normalizer (log sum of exponentials).
   /// This is the same as: \f$ x(i) = exp(x(i)) / \sum_i exp(x(i)) \f$
   void ApplySoftMax();
@@ -219,6 +222,16 @@ class VectorBase {
 
   /// Multiplies all elements by this constant.
   void Scale(Real alpha);
+
+  // Add val to each element of vector
+  void Add(Real val);
+
+  // Multipy element-by-element by another vector.
+  void MulElements(const VectorBase<Real> &v);
+
+  // Print the vector to stdout
+  void PrintDebug();
+
 
   friend class VectorBase<double>;
   friend class VectorBase<float>;

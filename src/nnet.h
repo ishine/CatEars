@@ -17,7 +17,7 @@
 #define PK_NNET_SOFTMAX_LAYER 3
 #define PK_NNET_ADD_LAYER 4
 #define PK_NNET_MUL_LAYER 5
-
+#define PK_NNET_SPLICE_LAYER 6
 
 namespace pocketkaldi {
 
@@ -29,7 +29,9 @@ class Layer {
     kLinear = 0,
     kReLU = 1,
     kNormalize = 2,
-    kSoftmax = 3
+    kSoftmax = 3,
+    kSplice = 6,
+    kBatchNorm = 7
   };
 
   // Propogate a batch of input vectors through this layer. And the batch of
@@ -79,6 +81,21 @@ class SpliceLayer : public Layer {
  private:
   int left_context_;
   int right_context_;
+};
+
+// BatchNormLayer is a layer to apply batch normalization without affine,
+// conputation is:
+//   y = (x - E(x)) / sqrt(VAR(x) + eps) 
+class BatchNormLayer : public Layer {
+ public:
+  BatchNormLayer(float eps);
+
+  void Propagate(
+      const MatrixBase<float> &in,
+      Matrix<float> *out) const override;
+ 
+ private:
+  float eps_;
 };
 
 // Softmax layer

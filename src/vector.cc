@@ -339,6 +339,13 @@ void VectorBase<Real>::ApplyLog() {
 }
 
 template<typename Real>
+void VectorBase<Real>::ApplyPow(Real power) {
+  for (int i = 0; i < dim_; i++) {
+    data_[i] = pow(data_[i], power);
+  }
+}
+
+template<typename Real>
 void VectorBase<Real>::Scale(Real alpha) {
   for (int i = 0; i < dim_; i++) {
     data_[i] *= alpha;
@@ -346,6 +353,29 @@ void VectorBase<Real>::Scale(Real alpha) {
 }
 
 
+template<typename Real>
+void VectorBase<Real>::Add(Real val) {
+  for (int i = 0; i < dim_; i++) {
+    data_[i] += val;
+  }
+}
+
+template<typename Real>
+void VectorBase<Real>::PrintDebug() {
+  printf("vector: dim = %d, data = [", dim_);
+  for (int i = 0; i < dim_; i++) {
+    printf("%f, ", data_[i]);
+  }
+  puts("]");
+}
+
+template<typename Real>
+void VectorBase<Real>::MulElements(const VectorBase<Real> &v) {
+  assert(v.Dim() == Dim() && "MulElements: vector size mismatch");
+  for (int i = 0; i < dim_; i++) {
+    data_[i] *= v(i);
+  }
+}
 
 template<typename Real>
 template<typename OtherReal>

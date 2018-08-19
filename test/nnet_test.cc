@@ -11,6 +11,7 @@ using pocketkaldi::LinearLayer;
 using pocketkaldi::SoftmaxLayer;
 using pocketkaldi::ReLULayer;
 using pocketkaldi::NormalizeLayer;
+using pocketkaldi::BatchNormLayer;
 using pocketkaldi::SpliceLayer;
 using pocketkaldi::Matrix;
 using pocketkaldi::SubMatrix;
@@ -18,7 +19,7 @@ using pocketkaldi::Vector;
 using pocketkaldi::SubVector;
 
 bool CheckEq(float a, float b) {
-  return fabs(a - b) < 1e-6;
+  return fabs(a - b) < 1e-3;
 }
 
 // Checks if v has the same data as std:;vector ref
@@ -139,11 +140,33 @@ void TestNormalizeLayer() {
   assert(fabs(sum - 4.0) < 0.0001);
 }
 
+void TestBatchNormLayer() {
+  BatchNormLayer batch_norm(1e-5f);
+
+  float x_data[] = {
+    0.6926, 0.5312, 0.3551,
+    0.1014, 0.4569, 0.6337,
+    0.5657, 0.8495, 0.8210,
+    0.0483, 0.1684, 0.9234
+  };
+  SubMatrix<float> x(x_data, 4, 3, 3);
+  Matrix<float> y;
+  batch_norm.Propagate(x, &y);
+
+  // Check results
+  assert(y.NumCols() == 3 && y.NumRows() == 4);
+  assert(CheckVector(y.Row(0), {1.2105,  0.1228, -1.5185}));
+  assert(CheckVector(y.Row(1), {-0.8905, -0.1840, -0.2297}));
+  assert(CheckVector(y.Row(2), {0.7593,  1.4357,  0.6372}));
+  assert(CheckVector(y.Row(3), {-1.0793, -1.3745,  1.1110}));
+}
+
 int main() {
   TestLinearLayer();
   TestSoftmaxLayer();
   TestReLULayer();
   TestNormalizeLayer();
   TestSpliceLayer();
+  TestBatchNormLayer();
   return 0;
 }

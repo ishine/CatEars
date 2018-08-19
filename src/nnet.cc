@@ -81,6 +81,45 @@ void SpliceLayer::Propagate(
   }
 }
 
+BatchNormLayer::BatchNormLayer(float eps): eps_(eps) {}
+
+void BatchNormLayer::Propagate(
+    const MatrixBase<float> &in,
+    Matrix<float> *out) const {
+  Vector<float> mean(in.NumCols(), Vector<float>::kSetZero);
+  Vector<float> scale(in.NumCols(), Vector<float>::kSetZero);
+
+  for (int r = 0; r < in.NumRows(); ++r) {
+    for (int c = 0; c < in.NumCols(); ++c) {
+      mean(c) += in(r, c);
+      scale(c) += in(r, c) * in(r, c);
+    }
+  }
+
+  mean.Scale(1.0f / in.NumRows());
+
+  Vector<float> mean2(mean.Dim());
+  mean2.CopyFromVec(mean);
+  mean2.ApplyPow(2);
+
+  // Currently scale is VAR(x)
+  scale.Scale(1.0f / in.NumRows());
+  scale.AddVec(-1.0, mean2);
+
+  // Scale = 1 / sqrt(VAR(x) + eps)
+  scale.Add(eps_);
+  scale.ApplyPow(-0.5f);
+
+  // Write to out
+  out->Resize(in.NumRows(), in.NumCols());
+  for (int r = 0; r < in.NumRows(); ++r) {
+    SubVector<float> row = out->Row(r);
+    row.CopyFromVec(in.Row(r));
+    row.AddVec(-1.0f, mean);
+    row.MulElements(scale);
+  }
+}
+
 void SoftmaxLayer::Propagate(
     const MatrixBase<float> &in,
     Matrix<float> *out) const {
