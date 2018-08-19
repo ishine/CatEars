@@ -215,6 +215,10 @@ class VectorBase {
   /// This is the same as: \f$ x(i) = exp(x(i)) / \sum_i exp(x(i)) \f$
   void ApplySoftMax();
 
+  /// Applies log soft-max to vector 
+  /// This is the same as: \f$ x(i) = x(i) - log(\sum_i exp(x(i))) \f$
+  void ApplyLogSoftMax();
+
   /// Add vector : *this = *this + alpha * rv (with casting between floats and
   /// doubles)
   template<typename OtherReal>

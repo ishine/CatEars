@@ -106,6 +106,14 @@ class SoftmaxLayer : public Layer {
       Matrix<float> *out) const override;
 };
 
+// LogSoftMax layer 
+class LogSoftmaxLayer : public Layer {
+ public:
+  void Propagate(
+      const MatrixBase<float> &in,
+      Matrix<float> *out) const override;
+};
+
 // ReLU layer
 class ReLULayer : public Layer {
  public:

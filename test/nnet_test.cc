@@ -12,6 +12,7 @@ using pocketkaldi::SoftmaxLayer;
 using pocketkaldi::ReLULayer;
 using pocketkaldi::NormalizeLayer;
 using pocketkaldi::BatchNormLayer;
+using pocketkaldi::LogSoftmaxLayer;
 using pocketkaldi::SpliceLayer;
 using pocketkaldi::Matrix;
 using pocketkaldi::SubMatrix;
@@ -103,6 +104,30 @@ void TestSoftmaxLayer() {
   assert(CheckEq(y(0, 3), 0.20577225f));
 }
 
+
+void TestLogSoftmaxLayer() {
+  // Create the Softmax layer
+  LogSoftmaxLayer softmax;
+
+  float x_data[] = {
+    0.6926, 0.5312, 0.3551,
+    0.1014, 0.4569, 0.6337,
+    0.5657, 0.8495, 0.8210,
+    0.0483, 0.1684, 0.9234
+  };
+  SubMatrix<float> x(x_data, 4, 3, 3);
+  Matrix<float> y;
+  softmax.Propagate(x, &y);
+
+  // Check results
+  // Check results
+  assert(y.NumCols() == 3 && y.NumRows() == 4);
+  assert(CheckVector(y.Row(0), {-0.9418, -1.1032, -1.2793}));
+  assert(CheckVector(y.Row(1), {-1.4182, -1.0627, -0.8859}));
+  assert(CheckVector(y.Row(2), {-1.2862, -1.0024, -1.0309}));
+  assert(CheckVector(y.Row(3), {-1.5100, -1.3899, -0.6349}));
+}
+
 void TestReLULayer() {
   // Create the ReLU layer
   ReLULayer relu;
@@ -164,6 +189,7 @@ void TestBatchNormLayer() {
 int main() {
   TestLinearLayer();
   TestSoftmaxLayer();
+  TestLogSoftmaxLayer();
   TestReLULayer();
   TestNormalizeLayer();
   TestSpliceLayer();

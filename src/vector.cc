@@ -277,6 +277,21 @@ void VectorBase<Real>::ApplySoftMax() {
 }
 
 template<typename Real>
+void VectorBase<Real>::ApplyLogSoftMax() {
+  Real sum = 0;
+
+  for (int i = 0; i < Dim(); ++i) {
+    Real exp_d = exp((*this)(i));
+    sum += exp_d;
+  }
+  Real logsum = log(sum);
+  
+  for (int i = 0; i < Dim(); ++i) {
+    (*this)(i) -= logsum;
+  }
+}
+
+template<typename Real>
 void Vector<Real>::Swap(Vector<Real> *other) {
   std::swap(this->data_, other->data_);
   std::swap(this->dim_, other->dim_);

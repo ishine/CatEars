@@ -131,6 +131,18 @@ void SoftmaxLayer::Propagate(
   }
 }
 
+void LogSoftmaxLayer::Propagate(
+    const MatrixBase<float> &in,
+    Matrix<float> *out) const {
+  out->Resize(in.NumRows(), in.NumCols());
+  out->CopyFromMat(in);
+  for (int row_idx = 0; row_idx < out->NumRows(); ++row_idx) {
+    SubVector<float> row = out->Row(row_idx);
+    row.ApplyLogSoftMax();
+  }
+}
+
+
 void ReLULayer::Propagate(
     const MatrixBase<float> &in,
     Matrix<float> *out) const {
