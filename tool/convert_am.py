@@ -16,58 +16,11 @@ to_file = sys.argv[2]
 # Ids for different layers
 LINEAR_LAYER = 0
 RELU_LAYER = 1
-NORMALIZE_LAYER = 2
-SOFTMAX_LAYER = 3
-ADD_LAYER = 4
-MUL_LAYER = 5
+SPLICE_LAYER = 6
+BATCHNORM_LAYER = 7
+LOGSOFTMAX_LAYER = 8
 
-class AM:
-    def __init__(self):
-        self.left_context = 0
-        self.right_context = 0
-        self.prior = None
-        self.layers = []
-
-    def layer_output_dim(self, layer, input_dim):
-        layer_type = layer[0]
-        if layer_type == LINEAR_LAYER:
-            b = layer[2]
-            return len(b)
-        elif layer_type == RELU_LAYER:
-            return input_dim
-        elif layer_type == NORMALIZE_LAYER:
-            return input_dim
-        elif layer_type == SOFTMAX_LAYER:
-            return input_dim
-        elif layer_type == ADD_LAYER:
-            return input_dim
-        elif layer_type == MUL_LAYER:
-            return input_dim
-
-    def layer_input_dim(self, layer):
-        layer_type = layer[0]
-        if layer_type == LINEAR_LAYER:
-            W = layer[1]
-            return len(W[0])
-        elif layer_type == MUL_LAYER:
-            v = layer[1]
-            return len(v)
-        else:
-            return None
-
-    def verify(self):
-        output_dim = None
-        input_dim = None
-        for idx, layer in enumerate(self.layers):
-            expected_dim = self.layer_input_dim(layer)
-            if output_dim != None and expected_dim != None and output_dim != expected_dim:
-                raise Exception('input_dim == {} expected, but {} found in layer {}'.format(
-                    expected_dim,
-                    output_dim,
-                    idx))
-            input_dim = output_dim
-            output_dim = self.layer_output_dim(layer, input_dim)
-
+class Layer:
     def write_vector(self, fd, vec):
         fd.write(b"VEC0")
         fd.write(struct.pack("<i", len(vec) * 4 + 4))
@@ -82,42 +35,112 @@ class AM:
         fd.write(struct.pack("<i", len(mat[0])))
         for col in mat:
             self.write_vector(fd, col)
-
-    def write_layer(self, fd, layer):
-        layer_type = layer[0]
+    
+    def write(self, fd):
         fd.write(b"LAY0")
+        fd.write(struct.pack("<i", self.layer_type))
 
-        if layer_type == ADD_LAYER:
-            scale = layer[1]
-            fd.write(struct.pack("<i", 8))
-            fd.write(struct.pack("<i", layer_type))
-            fd.write(struct.pack("<f", scale))
-        else:
-            fd.write(struct.pack("<i", 4))
-            fd.write(struct.pack("<i", layer_type))
+    def output_dim(self, input_dim):
+        return input_dim
+    
+    def input_dim(self):
+        return None
 
-        # Additional vectors and matrix
-        if layer_type == LINEAR_LAYER:
-            W = layer[1]
-            b = layer[2]
-            self.write_matrix(fd, W)
-            self.write_vector(fd, b)
-        elif layer_type == MUL_LAYER:
-            v = layer[1]
-            self.write_vector(fd, v)
-        elif layer_type == ADD_LAYER:
-            v = layer[2]
-            self.write_vector(fd, v)
+    def __str__(self):
+        return self.layer_name
+
+class LinearLayer(Layer):
+    def __init__(self, W, b):
+        self.W = W
+        self.b = b
+        self.layer_name = 'LinearLayer'
+        self.layer_type = LINEAR_LAYER
+    
+    def write(self, fd):
+        super().write(fd)
+        self.write_matrix(fd, self.W)
+        self.write_vector(fd, self.b)
+    
+    def input_dim(self):
+        return len(self.W[0])
+    
+    def output_dim(self, input_dim):
+        return len(self.W)
+    
+    def __str__(self):
+        return "{}: W = ({}, {}), b = ({})".format(
+            self.layer_name, len(self.W), len(self.W[0]), len(self.b))
+
+class ReluLayer(Layer):
+    def __init__(self):
+        self.layer_name = 'ReluLayer'
+        self.layer_type = LINEAR_LAYER
+
+class SpliceLayer(Layer):
+    def __init__(self, indices):
+        assert(len(indices) > 0)
+        self.layer_name = 'SpliceLayer'
+        self.layer_type = SPLICE_LAYER
+        self.indices = indices
+
+    def output_dim(self, input_dim):
+        if input_dim == None:
+            return None
+        return input_dim * len(self.indices)
+
+    def write(self, fd):
+        super().write(fd)
+        fd.write(struct.pack("<i", len(self.indices)))
+        for idx in self.indices:
+            fd.write(struct.pack("<i", idx))
+
+    def __str__(self):
+        return "{}: indices = {}".format(self.layer_name, self.indices)
+
+class BatchNormLayer(Layer):
+    def __init__(self, eps):
+        self.layer_name = 'BatchNormLayer'
+        self.layer_type = BATCHNORM_LAYER
+        self.eps = eps
+
+    def write(self, fd):
+        super().write(fd)
+        fd.write(struct.pack("<f", self.eps))
+
+    def __str__(self):
+        return "{}: eps = {}".format(self.layer_name, self.eps)
+
+class LogSoftmaxLayer(Layer):
+    def __init__(self):
+        self.layer_name = 'LogSoftmaxLayer'
+        self.layer_type = LOGSOFTMAX_LAYER
+
+class AM:
+    def __init__(self, layers):
+        self.left_context = 0
+        self.right_context = 0
+        self.prior = None
+        self.layers = layers
+
+    def verify(self):
+        output_dim = None
+        for idx, layer in enumerate(self.layers):
+            expected_dim = layer.input_dim()
+            if output_dim != None and expected_dim != None and output_dim != expected_dim:
+                raise Exception('input_dim == {} expected, but {} found in layer {}'.format(
+                    expected_dim,
+                    output_dim,
+                    idx))
+            output_dim = layer.output_dim(output_dim)
 
     def write(self, filename):
         with open(filename + ".nnet", 'wb') as fd:
-            fd.write(b"NNT0")
-            fd.write(struct.pack("<i", 4))
+            fd.write(b"NN01")
             fd.write(struct.pack("<i", len(self.layers)))
             for layer in self.layers:
-                self.write_layer(fd, layer)
+                layer.write(fd)
         with open(filename + ".prior", 'wb') as fd:
-            self.write_vector(fd, self.prior)
+            Layer().write_vector(fd, self.prior)
 
 re_tag = re.compile(r'<(.*?)>(.*?)</(.*?)>', re.DOTALL)
 
@@ -135,6 +158,12 @@ def read_until_token(token_name, text):
         raise Exception('unable to find token: {}'.format(token_name))
     return m.group(1)
 
+def read_string(text):
+    m = re.search(r'^\s*([-_A-Za-z0-9\.]+)\s+(.*)', text, re.DOTALL)
+    if m == None:
+        raise Exception('read_string failed')
+    return (m.group(1), m.group(2))
+
 def read_token(text):
     m = re.search(r'^\s*<(.*?)>(.*)', text, re.DOTALL)
     if m == None:
@@ -146,6 +175,12 @@ def read_int(text):
     if m == None:
         raise Exception('read_int failed')
     return (int(m.group(1)), m.group(2))
+
+def read_float(text):
+    m = re.search(r'^\s*((?:-?\d+)(?:\.(?:\d+))?(?:e-?\d+)?)\s+(.*)', text, re.DOTALL)
+    if m == None:
+        raise Exception('read_float failed')
+    return (float(m.group(1)), m.group(2))
 
 def read_matrix(text, num_type = float):
     m = re.search(r'^\s*\[(.*?)\]\s*(.*)', text, re.DOTALL)
@@ -165,66 +200,120 @@ def read_matrix(text, num_type = float):
             raise Exception('Row number mismatch')
     return matrix_cols, remained
 
-am = AM()
-
-with open(from_file) as fd:
-    model_text = fd.read()
+re_component = re.compile(r'^component-node name=(.*?) component=(.*?) input=(.*?)$')
+re_input = re.compile(r'^Append\((.*)\)$')
+re_split = re.compile(r'(Offset\([\w\.]+, *-?\d+\)|[\w\.]+)')
+re_offset = re.compile(r'^Offset\(([\w\.]+), *(-?\d+)\)$')
+def parse_nnet3_desc(desc_text):
+    lines = desc_text.split('\n')
+    prev_name = 'input'
+    layers = []
+    layer_dict = {}
+    for line in lines:
+        line = line.strip()
+        if line == '':
+            continue
+        node_type = line.split()[0]
+        assert(node_type in {'component-node', 'input-node', 'output-node'})
+        if node_type == 'component-node':
+            m = re_component.match(line)
+            assert(m != None)
+            layer_input = m.group(3).strip()
+            layer_comp = m.group(2)
+            m_input = re_input.match(layer_input)
+            if m_input != None:
+                indices = []
+                fields = re_split.split(m_input.group(1))
+                for field in fields:
+                    m_offset = re_offset.match(field.strip())
+                    if m_offset:
+                        from_comp = m_offset.group(1)
+                        index = int(m_offset.group(2))
+                        assert(from_comp == prev_name)
+                        indices.append(index)
+                    elif field.strip() in {',', ''}:
+                        pass
+                    else:
+                        assert(field.strip() == prev_name)
+                        indices.append(0)
+                layer_name = layer_comp + '_splice'
+                layer_dict[layer_name] = SpliceLayer(indices)
+                layers.append(layer_name)
+            else:
+                assert(layer_input == prev_name)
+            layers.append(layer_comp)
+            prev_name = layer_comp
+    return layers, layer_dict
 
 # Nnet token
-remained_text = goto_token('Nnet', model_text)
-remained_text = read_until_token('/Nnet', remained_text)
-remained_text = goto_token('NumComponents', remained_text)
-num_components, remained_text = read_int(remained_text)
-print('num_components = {}'.format(num_components))
+def read_nnet(model_text):
+    remained_text = goto_token('Nnet3', model_text)
+    remained_text = read_until_token('/Nnet3', remained_text)
+    nnet3_desc = read_until_token('NumComponents', remained_text)
 
-# Components token
-remained_text = goto_token('Components', remained_text)
-remained_text = read_until_token('/Components', remained_text)
+    remained_text = goto_token('NumComponents', remained_text)
+    num_components, remained_text = read_int(remained_text)
+    print('num_components = {}'.format(num_components))
+    print('------------------ nnet3_desc ------------------')
+    print(nnet3_desc)
+    layers, layer_dict = parse_nnet3_desc(nnet3_desc)
 
-# Tokens in Components
-while remained_text.strip() != '':
-    token_tag, remained_text = read_token(remained_text)
-    print(token_tag)
-    end_tag = '/' + token_tag
-    content_text = read_until_token(end_tag, remained_text)
-    remained_text = goto_token(end_tag, remained_text)
+    # Tokens in Components
+    print('------------------ read_layer ------------------')
+    while remained_text.strip() != '':
+        comp_name_tag, remained_text = read_token(remained_text)
+        assert(comp_name_tag == 'ComponentName')
+        comp_name, remained_text = read_string(remained_text)
+        token_tag, remained_text = read_token(remained_text)
+        print(comp_name, '=', token_tag)
+        end_tag = '/' + token_tag
+        content_text = read_until_token(end_tag, remained_text)
+        remained_text = goto_token(end_tag, remained_text)
 
-    # Parse token_text
-    if token_tag == 'SpliceComponent':
-        content_text = goto_token('Context', content_text)
-        context_mat, content_text = read_matrix(content_text, int)
-        left_context = -context_mat[0][0]
-        right_context = context_mat[0][-1]
-        am.left_context = left_context
-        am.right_context = right_context
-        print('left_context = {}, right_context = {}'.format(left_context, right_context))
-    elif token_tag == 'AffineComponentPreconditionedOnline':
-        content_text = goto_token('LinearParams', content_text)
-        W, content_text = read_matrix(content_text)
-        print('W: {} * {}'.format(len(W), len(W[0])))
-        content_text = goto_token('BiasParams', content_text)
-        b, content_text = read_matrix(content_text)
-        print('b: {} * {}'.format(len(b), len(b[0])))
-        am.layers.append((LINEAR_LAYER, W, b[0]))
-    elif token_tag == 'RectifiedLinearComponent':
-        am.layers.append((RELU_LAYER, ))
-    elif token_tag == 'NormalizeComponent':
-        am.layers.append((NORMALIZE_LAYER, ))
-    elif token_tag == 'FixedScaleComponent':
-        content_text = goto_token('Scales', content_text)
-        scales, content_text = read_matrix(content_text)
-        print('Scales: {} * {}'.format(len(W), len(W[0])))
-        am.layers.append((MUL_LAYER, scales[0]))
-    elif token_tag == 'SoftmaxComponent':
-        am.layers.append((SOFTMAX_LAYER, ))
-    else:
-        raise Exception('unexpected layer name: ' + token_tag)
+        # Parse token_text
+        if token_tag == 'NaturalGradientAffineComponent':
+            content_text = goto_token('LinearParams', content_text)
+            W, content_text = read_matrix(content_text)
+            content_text = goto_token('BiasParams', content_text)
+            b, content_text = read_matrix(content_text)
+            layer_dict[comp_name] = LinearLayer(W, b[0])
+        elif token_tag == 'RectifiedLinearComponent':
+            layer_dict[comp_name] = ReluLayer()
+        elif token_tag == 'BatchNormComponent':
+            content_text = goto_token('Epsilon', content_text)
+            eps, _ = read_float(content_text)
+            layer_dict[comp_name] = BatchNormLayer(eps)
+        elif token_tag == 'LogSoftmaxComponent':
+            layer_dict[comp_name] = LogSoftmaxLayer()
+        else:
+            raise Exception('unexpected layer name: ' + token_tag)
+        print(str(layer_dict[comp_name]))
 
-# Prior
-remained_text = goto_token('/Nnet', model_text)
-prior, content_text = read_matrix(remained_text)
-print('Prior: {} * {}'.format(len(prior), len(prior[0])))
-am.prior = prior[0]
+    print('------------------ layers ------------------')
+    layer_objects = []
+    for i, layer_name in enumerate(layers):
+        if layer_name in layer_dict:
+            layer = layer_dict[layer_name]
+            layer_objects.append(layer)
+            print('layer {}: {}'.format(i, str(layer)))
+        else:
+            raise Exception('layer not found: ' + layer_name)
+    
+    return layer_objects
 
-am.verify()
-am.write(to_file)
+if __name__ == '__main__':
+    with open(from_file) as fd:
+        model_text = fd.read()
+
+    layers = read_nnet(model_text)
+    am = AM(layers)
+
+    # Prior
+    remained_text = goto_token('Priors', model_text)
+    prior, content_text = read_matrix(remained_text)
+    print('------------------ prior ------------------')
+    print('Prior: {} * {}'.format(len(prior), len(prior[0])))
+    am.prior = prior[0]
+
+    am.verify()
+    am.write(to_file)
