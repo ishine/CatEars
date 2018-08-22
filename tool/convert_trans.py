@@ -16,6 +16,7 @@ with open(from_file) as fd:
     lines = list(map(lambda l: l.strip(), fd))
 num_pdfs = int(lines[0])
 num_transitions = int(lines[1])
+print('num_pdfs =', num_pdfs)
 
 map_list = [0 for i in range(num_transitions + 1)]
 for line in lines[2: ]:

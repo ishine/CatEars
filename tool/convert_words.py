@@ -3,7 +3,7 @@ import struct
 import io
 
 if len(sys.argv) != 3:
-    print("Usage: python3 {}: <words.txt> <am-bin>".format(sys.argv[0]))
+    print("Usage: python3 {}: <words.txt> <words-bin>".format(sys.argv[0]))
     print("Convert Kaldi words.txt to pocketkaldi format.")
     sys.exit(1)
 
@@ -12,7 +12,7 @@ to_file = sys.argv[2]
 
 words_idx = []
 max_idx = 0
-with open(from_file) as fd:
+with open(from_file, encoding = 'utf-8') as fd:
     for line in fd:
         fields = line.strip().split()
         if len(fields) != 2:

@@ -1,4 +1,4 @@
-import fst
+import pywrapfst as fst
 import sys
 import struct
 
@@ -20,37 +20,35 @@ if len(sys.argv) == 4:
         print_usage()
         quit()
 
-try:
-    t = fst.read(sys.argv[1])
-except:
-    print('Unable to read openfst file: {}'.format(sys.argv[1]))
+f = fst.Fst.read(sys.argv[1])
 
-start_state = t.start
-state_number = len(t)
+start_state = f.start()
+state_number = 0
 finals = []
 arcs = []
-for state in t.states:
-    if state.final:
-        finals.append(float(state.final))
+for state in f.states():
+    state_number += 1
+    if f.final(state):
+        finals.append(float(f.final(state)))
     else:
         finals.append(float("inf"))
 
-    for arc in state.arcs:
+    for arc in f.arcs(state):
         arcs.append((
-            state.stateid,
+            state,
             arc.nextstate,
             arc.ilabel,
             arc.olabel,
             float(arc.weight)))
 
 arcs.sort()
-state_arcidx = [-1] * len(t)
+state_arcidx = [-1] * state_number
 last_state = -1
 for idx, arc in enumerate(arcs):
     state = arc[0]
     if state_arcidx[state] == -1:
         state_arcidx[state] = idx
-assert(len(state_arcidx) == len(t) and len(finals) == len(t))
+assert(len(state_arcidx) == state_number and len(finals) == state_number)
 
 if output_binary:
     with open(sys.argv[2], 'wb') as fd:
