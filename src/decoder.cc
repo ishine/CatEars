@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <algorithm>
+#include <cmath>
 #include "list.h"
 #include "hashtable.h"
 
@@ -50,11 +51,15 @@ bool Decoder::Decode(pk_decodable_t *decodable) {
     PK_DEBUG(util::Format("frame: {}", num_frames_decoded_));
     t = clock();
     double cutoff = ProcessEmitting( decodable);
+    if (!std::isfinite(cutoff)) break;
     t_emitting += clock() - t;
     
     t = clock();
     ProcessNonemitting(cutoff);
     t_nonemitting = clock() - t;
+
+    // Exit when there is no active tokens
+    if (toks_.size() == 0) break;
 
     // GC of olabel nodes
     if (num_frames_decoded_ % 20 == 0) {
@@ -131,6 +136,8 @@ bool Decoder::InsertTok(
 
 double Decoder::GetCutoff(float *adaptive_beam, Token **best_tok) {
   double best_cost = INFINITY;
+  *best_tok = prev_toks_[0];
+
   costs_.clear();
   uint64_t next_random = kCutoffRandSeed;
 
@@ -151,6 +158,9 @@ double Decoder::GetCutoff(float *adaptive_beam, Token **best_tok) {
       *best_tok = tok;
     }
   }
+
+  // Exit if NAN found
+  if (!std::isfinite(best_cost)) return INFINITY;
 
   double beam_cutoff = best_cost + beam_;
   double max_active_cutoff = NAN;
@@ -235,6 +245,7 @@ float Decoder::ProcessEmitting(pk_decodable_t *decodable) {
   float weight_cutoff = GetCutoff(&adaptive_beam, &best_tok);
   PK_DEBUG(util::Format("weight_cutoff = {}", weight_cutoff));
   PK_DEBUG(util::Format("adaptive_beam = {}", adaptive_beam));
+  if (!std::isfinite(weight_cutoff)) return INFINITY;
 
   // This is the cutoff we use after adding in the log-likes (i.e.
   // for the next frame).  This is a bound on the cutoff we will use

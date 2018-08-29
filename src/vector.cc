@@ -379,7 +379,7 @@ template<typename Real>
 void VectorBase<Real>::PrintDebug() {
   printf("vector: dim = %d, data = [", dim_);
   for (int i = 0; i < dim_; i++) {
-    printf("%f, ", data_[i]);
+    printf("%s, ", std::to_string(data_[i]).c_str());
   }
   puts("]");
 }

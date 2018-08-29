@@ -147,8 +147,7 @@ pk_load_failed:
 }
 
 void pk_utterance_init(pk_utterance_t *utt) {
-  utt->internal = (pk_utterance_internal_t *)malloc(
-      sizeof(pk_utterance_internal_t));
+  utt->internal = new pk_utterance_internal_t;
   utt->hyp = NULL;
   utt->loglikelihood_per_frame = 0.0f;
 }

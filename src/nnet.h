@@ -8,17 +8,9 @@
 #include "util.h"
 #include "gemm.h"
 
-#define PK_NNET_SECTION "NNT0"
+#define PK_NNET_SECTION "NN01"
 #define PK_NNET_LAYER_SECTION "LAY0"
 
-// Layer types
-#define PK_NNET_LINEAR_LAYER 0
-#define PK_NNET_RELU_LAYER 1
-#define PK_NNET_NORMALIZE_LAYER 2
-#define PK_NNET_SOFTMAX_LAYER 3
-#define PK_NNET_ADD_LAYER 4
-#define PK_NNET_MUL_LAYER 5
-#define PK_NNET_SPLICE_LAYER 6
 
 namespace pocketkaldi {
 
@@ -32,7 +24,8 @@ class Layer {
     kNormalize = 2,
     kSoftmax = 3,
     kSplice = 6,
-    kBatchNorm = 7
+    kBatchNorm = 7,
+    kLogSoftmax = 8
   };
 
   // Propogate a batch of input vectors through this layer. And the batch of
@@ -40,21 +33,36 @@ class Layer {
   virtual void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const = 0;
+
+  // Read layer from fd
+  virtual Status Read(util::ReadableFile *fd) = 0;
+
+  // Layer type
+  virtual std::string Type() const = 0;
+
   virtual ~Layer() {}
 };
 
 // Linear layer: x^T dot W + b
 class LinearLayer : public Layer {
  public:
+  LinearLayer();
   // Initialize the linear layer with parameter W and b. It just copies the
   // values from W and b.
   LinearLayer(
       const MatrixBase<float> &W,
       const VectorBase<float> &b);
 
+  // Implements interface Layer
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override;
+
+  // Implements interface Layer
+  std::string Type() const override { return "Linear"; }
 
  private:
   Matrix<float> W_;
@@ -71,11 +79,18 @@ class LinearLayer : public Layer {
 //     [concat(v2, v4, v4)]]
 class SpliceLayer : public Layer {
  public:
+  SpliceLayer();
   SpliceLayer(const std::vector<int> &indices);
 
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override;
+
+  // Implements interface Layer
+  std::string Type() const override { return "Splice"; }
 
  private:
   std::vector<int> indices_;
@@ -86,12 +101,19 @@ class SpliceLayer : public Layer {
 //   y = (x - E(x)) / sqrt(VAR(x) + eps) 
 class BatchNormLayer : public Layer {
  public:
+  BatchNormLayer();
   BatchNormLayer(float eps);
 
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
  
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override;
+
+  // Implements interface Layer
+  std::string Type() const override { return "BatchNorm"; }
+
  private:
   float eps_;
 };
@@ -102,6 +124,12 @@ class SoftmaxLayer : public Layer {
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override {};
+
+  // Implements interface Layer
+  std::string Type() const override { return "Softmax"; }
 };
 
 // LogSoftMax layer 
@@ -110,6 +138,12 @@ class LogSoftmaxLayer : public Layer {
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override {};
+
+  // Implements interface Layer
+  std::string Type() const override { return "LogSoftmax"; }
 };
 
 // ReLU layer
@@ -118,6 +152,12 @@ class ReLULayer : public Layer {
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override {};
+
+  // Implements interface Layer
+  std::string Type() const override { return "ReLU"; }
 };
 
 // Normalize layer
@@ -126,6 +166,12 @@ class NormalizeLayer : public Layer {
   void Propagate(
       const MatrixBase<float> &in,
       Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override {};
+
+  // Implements interface Layer
+  std::string Type() const override { return "Normalize"; }
 };
 
 // The neural network class. It have a stack of different kinds of `Layer`

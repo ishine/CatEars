@@ -90,28 +90,15 @@ void AcousticModel::SpliceFeats(
 void AcousticModel::Compute(
     const pk_matrix_t *frames,
     pk_matrix_t *loglikelihood) {
-  // Prepare spliced feature matrix
-  int feats_dim = frames->nrow;
-  int spliced_dim = (left_context_ + right_context_ + 1) * feats_dim;
-  pk_matrix_t nn_input;
-  pk_matrix_init(&nn_input, spliced_dim, frames->ncol);
-  
-  // Splice the feats
-  SpliceFeats(frames, &nn_input);
-
   // Propogate through the neural network
-  nnet_.Propagate(&nn_input, loglikelihood);
+  nnet_.Propagate(frames, loglikelihood);
 
   // Compute log-likelihood
   for (int col_idx = 0; col_idx < loglikelihood->ncol; ++col_idx) {
     pk_vector_t c_col = pk_matrix_getcol(loglikelihood, col_idx);
     SubVector<float> col(c_col.data, c_col.dim);
-    col.ApplyFloor(1.0e-20);
-    col.ApplyLog();
     col.AddVec(-1.0f, log_prior_);
   }
-
-  pk_matrix_destroy(&nn_input);
 }
 
 }  // namespace pocketkaldi

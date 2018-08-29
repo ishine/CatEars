@@ -2,6 +2,7 @@ import sys
 import re
 import struct
 import math
+import numpy as np
 
 if len(sys.argv) != 3:
     print("Usage: python3 {}: <text-nnet2-am> <am-bin>".format(sys.argv[0]))
@@ -51,6 +52,7 @@ class Layer:
 
 class LinearLayer(Layer):
     def __init__(self, W, b):
+        assert(len(W.shape) == 2 and len(b.shape) == 1)
         self.W = W
         self.b = b
         self.layer_name = 'LinearLayer'
@@ -62,19 +64,19 @@ class LinearLayer(Layer):
         self.write_vector(fd, self.b)
     
     def input_dim(self):
-        return len(self.W[0])
+        return self.W.shape[0]
     
     def output_dim(self, input_dim):
-        return len(self.W)
+        return self.W.shape[1]
     
     def __str__(self):
         return "{}: W = ({}, {}), b = ({})".format(
-            self.layer_name, len(self.W), len(self.W[0]), len(self.b))
+            self.layer_name, self.W.shape[0], self.W.shape[1], self.b.shape[0])
 
 class ReluLayer(Layer):
     def __init__(self):
         self.layer_name = 'ReluLayer'
-        self.layer_type = LINEAR_LAYER
+        self.layer_type = RELU_LAYER
 
 class SpliceLayer(Layer):
     def __init__(self, indices):
@@ -198,7 +200,7 @@ def read_matrix(text, num_type = float):
             row_num = len(matrix_cols[0])
         elif row_num != len(matrix_cols[-1]):
             raise Exception('Row number mismatch')
-    return matrix_cols, remained
+    return np.array(matrix_cols), remained
 
 re_component = re.compile(r'^component-node name=(.*?) component=(.*?) input=(.*?)$')
 re_input = re.compile(r'^Append\((.*)\)$')
@@ -276,7 +278,7 @@ def read_nnet(model_text):
             W, content_text = read_matrix(content_text)
             content_text = goto_token('BiasParams', content_text)
             b, content_text = read_matrix(content_text)
-            layer_dict[comp_name] = LinearLayer(W, b[0])
+            layer_dict[comp_name] = LinearLayer(W.T, b[0])
         elif token_tag == 'RectifiedLinearComponent':
             layer_dict[comp_name] = ReluLayer()
         elif token_tag == 'BatchNormComponent':
