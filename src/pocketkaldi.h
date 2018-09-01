@@ -19,13 +19,9 @@ namespace pocketkaldi {
 class Fst;
 class AcousticModel;
 class Fbank;
+template <class T> class Vector;
+class SymbolTable;
 }  // namespace pocketkaldi
-
-typedef struct pk_am_t pk_am_t;
-typedef struct pk_vector_t pk_vector_t;
-typedef struct pk_transition_t pk_transition_t;
-typedef struct pk_fbank_t pk_fbank_t;
-typedef struct pk_symboltable_t pk_symboltable_t;
 
 typedef struct pk_status_t {
   bool ok;
@@ -37,8 +33,8 @@ typedef struct pk_t {
   pocketkaldi::Fst *fst;
   pocketkaldi::AcousticModel *am;
   pocketkaldi::Fbank *fbank;
-  pk_vector_t *cmvn_global_stats;
-  pk_symboltable_t *symbol_table;
+  pocketkaldi::Vector<float> *cmvn_global_stats;
+  pocketkaldi::SymbolTable *symbol_table;
 } pk_t;
 
 // Initialize the status set to success (ok) state

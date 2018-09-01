@@ -19,14 +19,14 @@ class CMVN {
   // Initialize online cmvn. global_stats is the accumulated CMVN stats from
   // training data. raw_feats is raw feature matrix. (global_stats and raw_feats
   // are borrowed)
-  CMVN(const pk_vector_t *global_stats, const pk_matrix_t *raw_feats);
+  CMVN(const Vector<float> &global_stats, const Matrix<float> &raw_feats);
   ~CMVN();
 
   // Gets the fests of frame after appling online CMVN.
-  void GetFrame(int frame, pk_vector_t *feats);
+  void GetFrame(int frame, VectorBase<float> *feats);
 
  private:
-  const pk_matrix_t *raw_feats_;
+  Matrix<float> raw_feats_;
   Vector<float> global_stats_;
   Vector<float> cached_stats_;
   int cached_frame_;

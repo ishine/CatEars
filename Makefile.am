@@ -57,8 +57,7 @@ if ENABLE_TOOLS
                            libpocketkaldi.a
 endif
 
-TESTS = list_test \
-        fst_test \
+TESTS = fst_test \
         srfft_test \
         fbank_test \
         cmvn_test \
@@ -69,8 +68,7 @@ TESTS = list_test \
         pool_test \
         gemm_test
 
-check_PROGRAMS = list_test \
-                 fst_test \
+check_PROGRAMS = fst_test \
                  srfft_test \
                  fbank_test \
                  cmvn_test \
@@ -92,10 +90,6 @@ hashtable_test_LDADD = libpocketkaldi.a
 gemm_test_SOURCES = test/gemm_test.cc
 gemm_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
 gemm_test_LDADD = libpocketkaldi.a
-
-list_test_SOURCES = test/list_test.cc
-list_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
-list_test_LDADD = libpocketkaldi.a
 
 fst_test_SOURCES = test/fst_test.cc
 fst_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"

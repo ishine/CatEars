@@ -225,8 +225,7 @@ void Fbank::ComputeFrame(
 
   // Compute FFT using split-radix algorithm. It just overwrites the data in
   // window 
-  pk_srfft_compute(
-      &srfft_,
+  srfft_.Compute(
       window->Data(),
       window->Dim(),
       true,
@@ -257,22 +256,17 @@ void Fbank::HammingWindowInit(Vector<float> *window) {
 
 Fbank::Fbank() :
     frame_length_padded_(RoundUpToNearestPowerOfTwo(FRAME_LENGTH)),
-    melbanks_(frame_length_padded_) {
-  pk_srfft_init(&srfft_, frame_length_padded_);
-
+    melbanks_(frame_length_padded_),
+    srfft_(frame_length_padded_) {
   // Hamming window
   HammingWindowInit(&window_function_);
 }
 
 void Fbank::Compute(
     const VectorBase<float> &wave,
-    pk_matrix_t *fbank_feature) {
+    Matrix<float> *fbank_feature) {
   int num_frames = CalcNumFrames(wave);
-  if (num_frames == 0) {
-    pk_matrix_resize(fbank_feature, 0, 0);
-  } else {
-    pk_matrix_resize(fbank_feature, PK_FBANK_DIM, num_frames);
-  }
+  fbank_feature->Resize(num_frames, PK_FBANK_DIM);
 
   // Extract fbank feature frame by frame
   Vector<float> window(frame_length_padded_, Vector<float>::kUndefined),
@@ -283,15 +277,11 @@ void Fbank::Compute(
     ComputeFrame(&window, &frame_feat, &buffer);
 
     // Store the value back to frame
-    pk_vector_t frame = pk_matrix_getcol(fbank_feature, i);
-    for (int i = 0; i < frame_feat.Dim(); ++i) {
-      frame.data[i] = frame_feat(i);
-    }
+    fbank_feature->Row(i).CopyFromVec(frame_feat);
   }
 }
 
 Fbank::~Fbank() {
-  pk_srfft_destroy(&srfft_);
   frame_length_padded_ = 0;
 }
 

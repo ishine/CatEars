@@ -5,32 +5,46 @@
 #include <math.h>
 #include "am.h"
 
-void pk_decodable_init(
-    pk_decodable_t *self,
+namespace pocketkaldi {
+
+Decodable::Decodable(
     AcousticModel *am,
     float prob_scale,
-    const pk_matrix_t *feats) {
-  pk_matrix_init(&self->log_prob, am->num_pdfs(), feats->ncol);
-  am->Compute(feats, &self->log_prob);
-  pk_matrix_scale(&self->log_prob, prob_scale);
-  self->am = am;
+    const MatrixBase<float> &feats): 
+        am_(am),
+        prob_scale_(prob_scale),
+        feats_(&feats) {
 }
 
-void pk_decodable_destroy(pk_decodable_t *self) {
-  pk_matrix_destroy(&self->log_prob);
-  self->am = NULL;
+Decodable::~Decodable() {
+  am_ = nullptr;
+  feats_ = nullptr;
+  prob_scale_ = 0.0f;
 }
 
-float pk_decodable_loglikelihood(
-    pk_decodable_t *self,
-    int frame,
-    int trans_id) {
-  int pdf_id = self->am->TransitionIdToPdfId(trans_id);
-  pk_vector_t frame_prob = pk_matrix_getcol(&self->log_prob, frame);
-  return frame_prob.data[pdf_id];
+float Decodable::LogLikelihood(int frame, int trans_id) {
+  if (log_prob_.NumRows() == 0) {
+    // We need to compute log_prob here
+    Compute();
+  }
+
+  int pdf_id = am_->TransitionIdToPdfId(trans_id);
+  SubVector<float> frame_prob = log_prob_.Row(frame);
+  return frame_prob(pdf_id);
 }
 
-bool pk_decodable_islastframe(pk_decodable_t *self, int frame) {
-  assert(frame < self->log_prob.ncol);
-  return frame == self->log_prob.ncol - 1;
+bool Decodable::IsLastFrame(int frame) {
+  if (log_prob_.NumRows() == 0) {
+    // We need to compute log_prob here
+    Compute();
+  }
+
+  return frame >= log_prob_.NumRows() - 1;
 }
+
+void Decodable::Compute() {
+  am_->Compute(*feats_, &log_prob_);
+  log_prob_.Scale(prob_scale_);
+}
+
+}  // namespace pocketkaldi

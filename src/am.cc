@@ -62,42 +62,16 @@ Status AcousticModel::Read(const Configuration &conf) {
   return Status::OK();
 }
 
-void AcousticModel::SpliceFeats(
-    const pk_matrix_t *feats,
-    pk_matrix_t *spliced_feats) {
-  for (int frame_idx = 0; frame_idx < feats->ncol; ++frame_idx) {
-    pk_vector_t spliced_x = pk_matrix_getcol(spliced_feats, frame_idx);
-    int offset = 0;
-    for (int f = -left_context_; f <= right_context_; ++f) {
-      int from_frame_idx = frame_idx + f;
-
-      // Padding boundary feats
-      if (from_frame_idx < 0) from_frame_idx = 0;
-      if (from_frame_idx >= feats->ncol) from_frame_idx = feats->ncol - 1;
-
-      pk_vector_t frame = pk_matrix_getcol(feats, from_frame_idx);
-      for (int d = 0; d < frame.dim; ++d) {
-        assert(offset + d < spliced_x.dim);
-        spliced_x.data[offset + d] = frame.data[d];
-      }
-
-      // Increase offset
-      offset += frame.dim;
-    }
-  }
-}
-
 void AcousticModel::Compute(
-    const pk_matrix_t *frames,
-    pk_matrix_t *loglikelihood) {
+    const MatrixBase<float> &frames,
+    Matrix<float> *log_prob) {
   // Propogate through the neural network
-  nnet_.Propagate(frames, loglikelihood);
+  nnet_.Propagate(frames, log_prob);
 
   // Compute log-likelihood
-  for (int col_idx = 0; col_idx < loglikelihood->ncol; ++col_idx) {
-    pk_vector_t c_col = pk_matrix_getcol(loglikelihood, col_idx);
-    SubVector<float> col(c_col.data, c_col.dim);
-    col.AddVec(-1.0f, log_prior_);
+  for (int r = 0; r < log_prob->NumRows(); ++r) {
+    SubVector<float> row = log_prob->Row(r);
+    row.AddVec(-1.0f, log_prior_);
   }
 }
 

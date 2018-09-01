@@ -14,56 +14,6 @@
 #include "vector.h"
 #include "gemm.h"
 
-typedef struct pk_vector_t pk_vector_t;
-
-// pk_matrix_t is a column-major matrix type in pocketkaldi
-typedef struct pk_matrix_t {
-  int ncol;
-  int nrow;
-  float *data;
-} pk_matrix_t;
-
-// Initialize the matrix with specified rows and columns
-POCKETKALDI_EXPORT
-void pk_matrix_init(pk_matrix_t *self, int nrow, int ncol);
-
-// Read matrix from fd. When any error occured, it will set status->ok to false
-POCKETKALDI_EXPORT
-void pk_matrix_read(pk_matrix_t *self, pk_readable_t *fd, pk_status_t *status);
-
-// Fill the matrix with value
-POCKETKALDI_EXPORT
-void pk_matrix_fill(pk_matrix_t *self, float val);
-
-// Multiplies two matrices C <- A^T dot B
-POCKETKALDI_EXPORT
-void pk_matrix_matmat(
-    const pk_matrix_t *A,
-    const pk_matrix_t *B,
-    pk_matrix_t *C);
-
-// Resize the matrix
-POCKETKALDI_EXPORT
-void pk_matrix_resize(pk_matrix_t *self, int nrow, int ncol);
-
-// Copy the matrix from src to dest
-POCKETKALDI_EXPORT
-void pk_matrix_copy(pk_matrix_t *dest, const pk_matrix_t *src);
-
-// Scale the elements of matrix
-POCKETKALDI_EXPORT
-void pk_matrix_scale(pk_matrix_t *self, float scale);
-
-// Destroy the matrix
-POCKETKALDI_EXPORT
-void pk_matrix_destroy(pk_matrix_t *self);
-
-// Returns a borrowed vector of the specified column. The values (data) could be
-// changed. And since it is just borrowed from the matrix, destory is not
-// needed. 
-POCKETKALDI_EXPORT
-pk_vector_t pk_matrix_getcol(const pk_matrix_t *self, int col);
-
 namespace pocketkaldi {
 
 template<typename Real>
@@ -99,6 +49,9 @@ class MatrixBase {
 
   /// Stride (distance in memory between each row).  Will be >= NumCols.
   inline int Stride() const {  return stride_; }
+
+  // Scale the elements of matrix
+  void Scale(Real scale);
 
   /// Sets to random values between 0 and 1
   void SetRand();

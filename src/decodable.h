@@ -9,35 +9,34 @@
 #include "am.h"
 #include "matrix.h"
 
-using pocketkaldi::AcousticModel;
+namespace pocketkaldi {
 
-// Used in decoder
-typedef struct pk_decodable_t {
-  pk_matrix_t log_prob;
-  AcousticModel *am;
-} pk_decodable_t;
+// Provide the log-likelihood for each frame and transition-id
+class Decodable {
+ public:
+  Decodable(
+      AcousticModel *am,
+      float prob_scale,
+      const MatrixBase<float> &feats);
 
-// Initialize the decodable struct
-POCKETKALDI_EXPORT
-void pk_decodable_init(
-    pk_decodable_t *self,
-    AcousticModel *am,
-    float prob_scale,
-    const pk_matrix_t *feats);
+  ~Decodable();
 
-// Destroy the decodable struct
-POCKETKALDI_EXPORT
-void pk_decodable_destroy(pk_decodable_t *self);
+  // Log-likelihood for each frame and trans_id
+  float LogLikelihood(int frame, int trans_id);
 
-// Gets the log-likelihood of frame and transition-id
-POCKETKALDI_EXPORT
-float pk_decodable_loglikelihood(
-    pk_decodable_t *self,
-    int frame,
-    int trans_id);
+  // Returns true if it is the last frame
+  bool IsLastFrame(int frame);
 
-// Return true if frame is the last frame 
-POCKETKALDI_EXPORT
-bool pk_decodable_islastframe(pk_decodable_t *self, int frame);
+  // Compute the log_prob for each frame
+  void Compute();
+ private:
+  AcousticModel *am_;
+  const MatrixBase<float> *feats_;
+  Matrix<float> log_prob_;
+  float prob_scale_;
+
+};
+
+}  // pocketkaldi
 
 #endif  // POCKETKALDI_DECODABLE_H_

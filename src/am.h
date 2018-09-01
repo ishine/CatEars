@@ -32,7 +32,7 @@ class AcousticModel {
   }
 
   // Compute the log-likelihood of the feature matrix
-  void Compute(const pk_matrix_t *frames, pk_matrix_t *loglikelihood);
+  void Compute(const MatrixBase<float> &frames, Matrix<float> *log_prob);
  
   // Number of PDFs in this AM
   int num_pdfs() const { return num_pdfs_; }
@@ -44,10 +44,6 @@ class AcousticModel {
   int right_context_;
   int num_pdfs_;
   Vector<int32_t> tid2pdf_;
-
-  // Splice the feature matrix 'feats' with the contexts specified by
-  // 'left_context' and 'right_context'. Store the result into 'spliced_feats'
-  void SpliceFeats(const pk_matrix_t *feats, pk_matrix_t *spliced_feats);
 };
 
 }  // namespace pocketkaldi

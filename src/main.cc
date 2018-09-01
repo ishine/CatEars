@@ -5,7 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pocketkaldi.h"
+#include "status.h"
 #include "util.h"
+
+using pocketkaldi::Status;
+using pocketkaldi::util::ReadableFile;
+using pocketkaldi::util::Split;
 
 void check_and_report_error(const pk_status_t *status) {
   if (!status->ok) {
@@ -14,35 +19,51 @@ void check_and_report_error(const pk_status_t *status) {
   }
 }
 
-// Process one utterance
-void process_audio(pk_t *recognizer, const char *filename) {
+void CheckStatus(const Status &status) {
+  if (!status.ok()) {
+    printf("pocketkaldi: %s\n", status.what().c_str());
+    exit(1);
+  }
+}
+
+// Process one utterance and return its hyp
+std::string ProcessAudio(pk_t *recognizer, const std::string &filename) {
   pk_status_t status;
   pk_status_init(&status);
 
   pk_utterance_t utt;
   pk_utterance_init(&utt);
-  pk_read_audio(&utt, filename, &status);
+  pk_read_audio(&utt, filename.c_str(), &status);
   check_and_report_error(&status);
 
   pk_process(recognizer, &utt);
-  printf("%s\t%s\t%f\n", filename, utt.hyp, utt.loglikelihood_per_frame);
+  std::string hyp = utt.hyp;
 
   pk_utterance_destroy(&utt);
+  return hyp;
 }
 
 // Process a list of utterances
 void process_scp(pk_t *recognizer, const char *filename) {
-  pk_status_t status;
-  pk_status_init(&status);
-  pk_readable_t *fd = pk_readable_open(filename, &status);
-  check_and_report_error(&status);
-
   // Read each line in scp file
-  char audio_file[2048];
-  while (pk_readable_readline(fd, audio_file, sizeof(audio_file), &status)) {
-    process_audio(recognizer, audio_file);
+  ReadableFile fd;
+  Status status = fd.Open(filename);
+  CheckStatus(status);
+
+  std::string line;
+  while (fd.ReadLine(&line, &status) && status.ok()) {
+    std::vector<std::string> fields = Split(line, " ");
+    if (fields.size() != 2) {
+      printf("scp: unexpected line: %s\n", line.c_str());
+      exit(22);
+    }
+
+    std::string name = fields[0];
+    std::string wav_file = fields[1];
+    std::string hyp = ProcessAudio(recognizer, wav_file);
+    printf("%s %s\n", name.c_str(), hyp.c_str());
   }
-  check_and_report_error(&status);
+  CheckStatus(status);
 }
 
 // Print the usage of this program and exit
@@ -70,7 +91,8 @@ int main(int argc, char **argv) {
 
   const char *suffix = input_file + strlen(input_file) - 4;
   if (strcmp(suffix, ".wav") == 0) {
-    process_audio(&recognizer, input_file);
+    std::string hyp = ProcessAudio(&recognizer, input_file);
+    puts(hyp.c_str());
   } else {
     process_scp(&recognizer, input_file);
   }

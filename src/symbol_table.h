@@ -3,35 +3,33 @@
 #ifndef POCKETKALDI_SYMBOL_TABLE_H_
 #define POCKETKALDI_SYMBOL_TABLE_H_
 
+#include <string>
+#include <vector>
+#include "status.h"
 #include "util.h"
 
 #define PK_SYMBOLTABLE_SECTION "SYM0"
 
+namespace pocketkaldi {
+
 // Store a list of symbols. And the symbol string could be got by
-//   pk_symboltable_get(symboltable, symbol_id)
-typedef struct pk_symboltable_t {
-  int size;
-  char *buffer;
-  int *buffer_index;
-} pk_symboltable_t;
+//   SymbolTable::Get(symbol_id)
+class SymbolTable {
+ public:
+  SymbolTable();
+  
+  // Read synbol table file
+  Status Read(const std::string &filename);
 
-// Initialize the symbol table
-POCKETKALDI_EXPORT
-void pk_symboltable_init(pk_symboltable_t *self);
+  // Get symbol by id
+  const char *Get(int symbol_id);
 
-// Destroy the symbol table
-POCKETKALDI_EXPORT
-void pk_symboltable_destroy(pk_symboltable_t *self);
+ private:
+  int size_;
+  std::vector<char> buffer_;
+  std::vector<int> buffer_index_;
+};
 
-// Read the symbol table from fd. If failed, status->ok will be set to false
-POCKETKALDI_EXPORT
-void pk_symboltable_read(
-    pk_symboltable_t *self,
-    pk_readable_t *fd,
-    pk_status_t *status);
-
-// Get the symbol by id, return the string of symbol.
-POCKETKALDI_EXPORT
-const char *pk_symboltable_get(const pk_symboltable_t *self, int symbol_id); 
+}  // namespace pocketkaldi
 
 #endif  // POCKETKALDI_SYMBOL_TABLE_H_

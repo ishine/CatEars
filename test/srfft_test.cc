@@ -8,6 +8,8 @@
 
 #define FRAME_SIZE 128
 
+using pocketkaldi::SRFFT;
+
 float fft_data[FRAME_SIZE] = {
   64.327972f,
   5.358913f,
@@ -271,19 +273,16 @@ float data[FRAME_SIZE] = {
 };
 
 int main() {
-  pk_srfft_t srfft;
-  pk_srfft_init(&srfft, FRAME_SIZE);
+  SRFFT srfft(FRAME_SIZE);
 
   float buffer[FRAME_SIZE], x[FRAME_SIZE];
   memcpy(x, data, FRAME_SIZE * sizeof(float));
 
   int data_size = sizeof(data) / sizeof(float);
   int buffer_size = sizeof(buffer) / sizeof(float);
-  pk_srfft_compute(&srfft, x, FRAME_SIZE, true, buffer, FRAME_SIZE);
+  srfft.Compute(x, FRAME_SIZE, true, buffer, FRAME_SIZE);
   for (int i = 0; i < data_size; ++i) {
-    assert(fabs(x[i] - fft_data[i]) < 1e-6);
+    assert(fabs(x[i] - fft_data[i]) < 1e-4);
   }
-
-  pk_srfft_destroy(&srfft);
   return 0;
 }

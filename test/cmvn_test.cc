@@ -13,8 +13,10 @@
 using pocketkaldi::Fbank;
 using pocketkaldi::CMVN;
 using pocketkaldi::Vector;
+using pocketkaldi::Matrix;
 using pocketkaldi::Read16kPcm;
 using pocketkaldi::Status;
+using pocketkaldi::util::ReadableFile;
 
 // Read a matrix from a text file and store them into mat. nrows is the rows of
 // mat
@@ -50,36 +52,29 @@ void TestOnlineCmvn() {
 
   // Computes fbank feature
   Fbank fbank;
-  pk_matrix_t fbank_feat;
-  pk_matrix_init(&fbank_feat, 0, 0);
+  Matrix<float> fbank_feat;
   fbank.Compute(pcm_data, &fbank_feat);
 
   // Read global stats from file
-  pk_readable_t *fd = pk_readable_open(global_stats_path.c_str(), &status);
-  assert(status.ok);
+  ReadableFile fd;
+  s = fd.Open(global_stats_path);
+  assert(s.ok());
 
-  pk_vector_t global_stats;
-  pk_vector_init(&global_stats, 0, NAN);
-  pk_vector_read(&global_stats, fd, &status);
-  assert(status.ok);
-  pk_readable_close(fd);
+  Vector<float> global_stats;
+  s = global_stats.Read(&fd);
+  assert(s.ok());
 
   // Initialize cmvn and cmvn instance
-  CMVN cmvn(&global_stats, &fbank_feat);
+  CMVN cmvn(global_stats, fbank_feat);
 
   // Apply CMVN
-  pk_vector_t feats;
-  pk_vector_init(&feats, fbank_feat.nrow, NAN);
-  for (int i = 0; i < fbank_feat.ncol; ++i) {
+  Vector<float> feats(fbank_feat.NumCols());
+  for (int i = 0; i < fbank_feat.NumRows(); ++i) {
     cmvn.GetFrame(i, &feats);
-    for (int d = 0; d < feats.dim; ++d) {
-      assert(feats.data[d] - corr[i * feats.dim + d] < 0.0001);
+    for (int d = 0; d < feats.Dim(); ++d) {
+      assert(feats(d) - corr[i * feats.Dim() + d] < 0.0001);
     }
   }
-
-  pk_vector_destroy(&global_stats);
-  pk_vector_destroy(&feats);
-  pk_matrix_destroy(&fbank_feat);
 }
 
 int main() {

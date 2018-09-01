@@ -13,7 +13,6 @@
 #include "decoder.h"
 #include "fbank.h"
 #include "fst.h"
-#include "list.h"
 #include "nnet.h"
 #include "symbol_table.h"
 #include "pcm_reader.h"
@@ -25,8 +24,14 @@ using pocketkaldi::Fbank;
 using pocketkaldi::CMVN;
 using pocketkaldi::util::ToRawStatus;
 using pocketkaldi::Status;
-
-PKLIST_DEFINE(char, byte_list)
+using pocketkaldi::Configuration;
+using pocketkaldi::Vector;
+using pocketkaldi::VectorBase;
+using pocketkaldi::Matrix;
+using pocketkaldi::SubVector;
+using pocketkaldi::AcousticModel;
+using pocketkaldi::Decodable;
+using pocketkaldi::SymbolTable;
 
 // The internal version of an utterance. It stores the intermediate state in
 // decoding.
@@ -49,22 +54,48 @@ void pk_destroy(pk_t *self) {
   delete self->am;
   self->am = NULL;
 
+  delete self->cmvn_global_stats;
+  self->cmvn_global_stats = nullptr;
 
-  if (self->cmvn_global_stats) {
-    pk_vector_destroy(self->cmvn_global_stats);
-    free(self->cmvn_global_stats);
-    self->cmvn_global_stats = NULL;
-  }
-
-  if (self->symbol_table) {
-    pk_symboltable_destroy(self->symbol_table);
-    free(self->symbol_table);
-    self->symbol_table = NULL;
-  }
+  delete self->symbol_table;
+  self->symbol_table = nullptr;
 
   delete self->fbank;
   self->fbank = NULL;
 }
+
+// Read CMVN stats
+Status ReadCMVNStats(pk_t *self, const Configuration &conf) {
+  // Get cmvn_stats filename from config file
+  std::string filename = conf.GetPathOrElse("cmvn_stats", "");
+  if (filename == "") {
+    return pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
+        "Unable to find key 'cmvn_stats' in {}",
+        conf.filename()));
+  }
+
+  pocketkaldi::util::ReadableFile fd;
+  PK_CHECK_STATUS(fd.Open(filename));
+  self->cmvn_global_stats = new Vector<float>();
+  PK_CHECK_STATUS(self->cmvn_global_stats->Read(&fd));
+
+  return Status::OK();
+}
+
+// Read symbol table
+Status ReadSymbolTable(pk_t *self, const Configuration &conf) {
+  std::string filename = conf.GetPathOrElse("symbol_table", "");
+  if (filename == "") {
+    return pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
+        "Unable to find key 'symbol_table' in {}",
+        filename));
+  }
+  self->symbol_table = new SymbolTable();
+  PK_CHECK_STATUS(self->symbol_table->Read(filename)); 
+
+  return Status::OK();
+}
+
 
 // Pocketkaldi model struct
 //   FST
@@ -73,7 +104,6 @@ void pk_destroy(pk_t *self) {
 //   AM
 //   SYMBOL_TABLE
 void pk_load(pk_t *self, const char *filename, pk_status_t *status) {
-  pk_readable_t *fd = nullptr;
   pocketkaldi::util::ReadableFile fd_vn;
   std::string fn;
   pocketkaldi::Configuration conf;
@@ -93,45 +123,19 @@ void pk_load(pk_t *self, const char *filename, pk_status_t *status) {
   self->fst = new pocketkaldi::Fst();
   status_vn = self->fst->Read(&fd_vn);
   if (!status_vn.ok()) goto pk_load_failed;
-  fd = NULL;
 
   // CMVN
-  fn = conf.GetPathOrElse("cmvn_stats", "");
-  if (fn == "") {
-    status_vn = pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
-        "Unable to find key 'cmvn_stats' in {}",
-        filename));
-    goto pk_load_failed;
-  }
-  fd = pk_readable_open(fn.c_str(), status);
-  self->cmvn_global_stats = (pk_vector_t *)malloc(sizeof(pk_vector_t));
-  pk_vector_init(self->cmvn_global_stats, 0, NAN);
-  pk_vector_read(self->cmvn_global_stats, fd, status);
-  if (!status->ok) goto pk_load_failed;
-  pk_readable_close(fd);
-  fd = NULL;
+  status_vn = ReadCMVNStats(self, conf);
+  if (!status_vn.ok()) goto pk_load_failed;
 
   // AM
   self->am = new AcousticModel();
   status_vn = self->am->Read(conf);
   if (!status_vn.ok()) goto pk_load_failed;
-  fd = NULL;
 
   // SYMBOL TABLE
-  fn = conf.GetPathOrElse("symbol_table", "");
-  if (fn == "") {
-    status_vn = pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
-        "Unable to find key 'symbol_table' in {}",
-        filename));
-    goto pk_load_failed;
-  }
-  fd = pk_readable_open(fn.c_str(), status);
-  self->symbol_table = (pk_symboltable_t *)malloc(sizeof(pk_symboltable_t));
-  pk_symboltable_init(self->symbol_table);
-  pk_symboltable_read(self->symbol_table, fd, status);
-  if (!status->ok) goto pk_load_failed;
-  pk_readable_close(fd);
-  fd = NULL;
+  status_vn = ReadSymbolTable(self, conf);
+  if (!status_vn.ok()) goto pk_load_failed;
 
   // Initialize fbank feature extractor
   self->fbank = new Fbank();
@@ -143,7 +147,6 @@ pk_load_failed:
     } 
     pk_destroy(self);
   }
-  if (fd != NULL) pk_readable_close(fd);
 }
 
 void pk_utterance_init(pk_utterance_t *utt) {
@@ -188,33 +191,27 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
 
   // Extract fbank feats from raw_wave
   t = clock();
-  pk_matrix_t raw_feats;
-  pk_matrix_init(&raw_feats, 0, 0);
+  Matrix<float> raw_feats;
   recognizer->fbank->Compute(utt->internal->raw_wave, &raw_feats);
   t = clock() - t;
   fputs(pocketkaldi::util::Format("Fbank: {}ms\n", ((float)t) / CLOCKS_PER_SEC  * 1000).c_str(), stderr);
 
   // Apply CMVN to raw_wave
   t = clock();
-  CMVN cmvn(recognizer->cmvn_global_stats, &raw_feats);
-  pk_matrix_t feats;
-  pk_matrix_init(&feats, raw_feats.nrow, raw_feats.ncol);
-  for (int frame = 0; frame < raw_feats.ncol; ++frame) {
-    pk_vector_t frame_col = pk_matrix_getcol(&feats, frame);
-    cmvn.GetFrame(frame, &frame_col);
+  CMVN cmvn(*recognizer->cmvn_global_stats, raw_feats);
+  Matrix<float> feats(raw_feats.NumRows(), raw_feats.NumCols());
+  for (int frame = 0; frame < raw_feats.NumRows(); ++frame) {
+    SubVector<float> frame_raw = feats.Row(frame);
+    cmvn.GetFrame(frame, &frame_raw);
   }
   t = clock() - t;
   fprintf(stderr, "CMVN: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
 
   // Start to decode
   Decoder decoder(recognizer->fst);
-  pk_decodable_t decodable;
+  Decodable decodable(recognizer->am, 0.1, feats);
   t = clock();
-  pk_decodable_init(
-      &decodable,
-      recognizer->am,
-      0.1,
-      &feats);
+  decodable.Compute();
   t = clock() - t;
   fprintf(stderr, "NNET: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
   
@@ -229,7 +226,7 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
   if (!hyp.words().empty()) {
     for (int word_id : words) {
       // Append the word into hyp
-      const char *word = pk_symboltable_get(recognizer->symbol_table, word_id);
+      const char *word = recognizer->symbol_table->Get(word_id);
       hyp_text += word;
       hyp_text += ' ';
     }
@@ -237,13 +234,9 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
     // Copy hyp to utt->hyp
     utt->hyp = (char *)malloc(sizeof(char) * hyp_text.size());
     pk_strlcpy(utt->hyp, hyp_text.data(), hyp_text.size());
-    utt->loglikelihood_per_frame = hyp.weight() / feats.ncol;
+    utt->loglikelihood_per_frame = hyp.weight() / feats.NumRows();
   } else {
     utt->hyp = (char *)malloc(sizeof(char));
     *(utt->hyp) = '\0';
   }
-
-  pk_matrix_destroy(&raw_feats);
-  pk_matrix_destroy(&feats);
-  pk_decodable_destroy(&decodable);
 }

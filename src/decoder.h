@@ -59,7 +59,7 @@ class Decoder {
 
   // Decodes the Decodable object, the best path could be obtain by
   // Decoder::BestPath()
-  bool Decode(pk_decodable_t *decodable);
+  bool Decode(Decodable *decodable);
 
   // Return true if reached the final state
   bool ReachedFinal();
@@ -101,7 +101,7 @@ class Decoder {
 
   // Process the emitting (non-epsilon) arcs of each states in the beam
   // \return cutoff of next weight
-  float ProcessEmitting(pk_decodable_t *decodable);
+  float ProcessEmitting(Decodable *decodable);
 
   // Only used in get_cutoff()
   std::vector<float> costs_;

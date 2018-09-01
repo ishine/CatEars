@@ -6,7 +6,6 @@
 #include <time.h>
 #include <algorithm>
 #include <cmath>
-#include "list.h"
 #include "hashtable.h"
 
 namespace pocketkaldi {
@@ -37,7 +36,7 @@ Decoder::~Decoder() {
   fst_ = nullptr;
 }
 
-bool Decoder::Decode(pk_decodable_t *decodable) {
+bool Decoder::Decode(Decodable *decodable) {
   clock_t t;
 
   // Extract fbank feats from raw_wave
@@ -47,7 +46,7 @@ bool Decoder::Decode(pk_decodable_t *decodable) {
   
   PK_DEBUG("InitDecoding()");
   InitDecoding();
-  while(!pk_decodable_islastframe(decodable, num_frames_decoded_ - 1)) {
+  while(!decodable->IsLastFrame(num_frames_decoded_ - 1)) {
     PK_DEBUG(util::Format("frame: {}", num_frames_decoded_));
     t = clock();
     double cutoff = ProcessEmitting( decodable);
@@ -231,7 +230,7 @@ void Decoder::ProcessNonemitting(double cutoff) {
 }
 
 // Process the emitting (non-epsilon) arcs of each states in the beam
-float Decoder::ProcessEmitting(pk_decodable_t *decodable) {
+float Decoder::ProcessEmitting(Decodable *decodable) {
   // Clear the prev_toks_
   state_idx_.Clear();
 
@@ -260,8 +259,7 @@ float Decoder::ProcessEmitting(pk_decodable_t *decodable) {
   while ((arc = arc_iter.Next()) != nullptr) {
     if (arc->input_label == 0) continue;
 
-    float acoustic_cost = -pk_decodable_loglikelihood(
-        decodable,
+    float acoustic_cost = -decodable->LogLikelihood(
         num_frames_decoded_,
         arc->input_label);
     double total_cost = best_tok->cost() + arc->weight + acoustic_cost;
@@ -284,8 +282,7 @@ float Decoder::ProcessEmitting(pk_decodable_t *decodable) {
     while ((arc = arc_iter.Next()) != nullptr) {
       if (arc->input_label == 0) continue;
 
-      float ac_cost = -pk_decodable_loglikelihood(
-          decodable,
+      float ac_cost = -decodable->LogLikelihood(
           num_frames_decoded_,
           arc->input_label);
       double total_cost = from_tok->cost() + arc->weight + ac_cost;

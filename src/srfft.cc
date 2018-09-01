@@ -42,40 +42,69 @@
 #define M_SQRT1_2 0.70710678118654752440
 #endif
 
-static void compute_tables(pk_srfft_t *self) {
+namespace {
+
+inline void complex_im_exp(float x, float *a_re, float *a_im) {
+  *a_re = cos(x);
+  *a_im = sin(x);
+}
+
+//! ComplexMul implements, inline, the complex multiplication b *= a.
+inline void complex_mul(float a_re, float a_im, float *b_re, float *b_im) {
+  float tmp_re = (*b_re * a_re) - (*b_im * a_im);
+  *b_im = *b_re * a_im + *b_im * a_re;
+  *b_re = tmp_re;
+}
+
+inline void complex_add_product(
+    float a_re,
+    float a_im,
+    float b_re,
+    float b_im,
+    float *c_re,
+    float *c_im) {
+  *c_re += b_re * a_re - b_im * a_im;
+  *c_im += b_re * a_im + b_im * a_re;
+}
+
+}  // namespace 
+
+namespace pocketkaldi {
+
+void SRFFT::ComputeTable() {
   int imax, lg2, i, j;
   int m, m2, m4, m8, nel, n;
   float *cn, *spcn, *smcn, *c3n, *spc3n, *smc3n;
   float ang, c, s;
 
-  lg2 = self->logn >> 1;
-  if (self->logn & 1) lg2++;
-  self->brseed = (int *)malloc(sizeof(int) * (1 << lg2));
-  self->brseed[0] = 0;
-  self->brseed[1] = 1;
+  lg2 = logn_ >> 1;
+  if (logn_ & 1) lg2++;
+  brseed_ = (int *)malloc(sizeof(int) * (1 << lg2));
+  brseed_[0] = 0;
+  brseed_[1] = 1;
   for (j = 2; j <= lg2; j++) {
     imax = 1 << (j - 1);
     for (i = 0; i < imax; i++) {
-      self->brseed[i] <<= 1;
-      self->brseed[i + imax] = self->brseed[i] + 1;
+      brseed_[i] <<= 1;
+      brseed_[i + imax] = brseed_[i] + 1;
     }
   }
 
-  if (self->logn < 4) {
-    self->tab = NULL;
+  if (logn_ < 4) {
+    tab_ = NULL;
   } else {
-    self->tab = (float **)malloc(sizeof(float *) * self->logn - 3);
-    for (i = self->logn; i >= 4 ;i--) {
+    tab_ = (float **)malloc(sizeof(float *) * logn_ - 3);
+    for (i = logn_; i >= 4 ;i--) {
       /* Compute a few constants */
       m = 1 << i; m2 = m / 2; m4 = m2 / 2; m8 = m4 /2;
 
       /* Allocate memory for tables */
       nel = m4 - 2;
 
-      self->tab[i - 4] = (float *)malloc(sizeof(float) * (6 * nel));
+      tab_[i - 4] = (float *)malloc(sizeof(float) * (6 * nel));
 
       /* Initialize pointers */
-      cn = self->tab[i - 4]; spcn  = cn + nel;  smcn  = spcn + nel;
+      cn = tab_[i - 4]; spcn  = cn + nel;  smcn  = spcn + nel;
       c3n = smcn + nel;  spc3n = c3n + nel; smc3n = spc3n + nel;
 
       /* Compute tables */
@@ -92,8 +121,7 @@ static void compute_tables(pk_srfft_t *self) {
   }
 }
 
-static void complexfft_compute_recursive(
-    const pk_srfft_t *self,
+void SRFFT::ComplexfftComputeRecursive(
     float *xr,
     float *xi,
     int logn) {
@@ -198,7 +226,7 @@ static void complexfft_compute_recursive(
   xi1 = xi + m2; xi2 = xi1 + m4;
   if (logn >= 4) {
     nel = m4 - 2;
-    cn  = self->tab[logn - 4]; spcn  = cn + nel;  smcn  = spcn + nel;
+    cn  = tab_[logn - 4]; spcn  = cn + nel;  smcn  = spcn + nel;
     c3n = smcn + nel;  spc3n = c3n + nel; smc3n = spc3n + nel;
   }
   xr1++; xr2++; xi1++; xi2++;
@@ -225,20 +253,18 @@ static void complexfft_compute_recursive(
   }
 
   /* Call ssrec again with half DFT length */
-  complexfft_compute_recursive(self, xr, xi, logn - 1);
+  ComplexfftComputeRecursive(xr, xi, logn - 1);
 
   /* Call ssrec again twice with one quarter DFT length.
      Constants have to be recomputed, because they are static! */
   // m = 1 << logn; m2 = m / 2;
-  complexfft_compute_recursive(self, xr + m2, xi + m2, logn - 2);
+  ComplexfftComputeRecursive(xr + m2, xi + m2, logn - 2);
   // m = 1 << logn;
   m4 = 3 * (m / 4);
-  complexfft_compute_recursive(self, xr + m4, xi + m4, logn - 2);
+  ComplexfftComputeRecursive(xr + m4, xi + m4, logn - 2);
 }
 
-static void 
-complexfft_bit_reverse_permute(
-    const pk_srfft_t *self,
+void SRFFT::BitReversePermute(
     float *x,
     int logn)  {
   int i, j, lg2, n;
@@ -251,11 +277,11 @@ complexfft_bit_reverse_permute(
 
   /* Unshuffling loop */
   for (off = 1; off < n; off++) {
-    fj = n * self->brseed[off]; i = off; j = fj;
+    fj = n * brseed_[off]; i = off; j = fj;
     tmp = x[i]; x[i] = x[j]; x[j] = tmp;
     xp = &x[i];
-    brp = &(self->brseed[1]);
-    for (gno = 1; gno < self->brseed[off]; gno++) {
+    brp = &(brseed_[1]);
+    for (gno = 1; gno < brseed_[off]; gno++) {
       xp += n;
       j = fj + *brp++;
       xq = x + j;
@@ -264,8 +290,7 @@ complexfft_bit_reverse_permute(
   }
 }
 
-static void complexfft_compute2(
-    const pk_srfft_t *self,
+void SRFFT::ComplexFFTCompute2(
     float *xr,
     float *xi,
     bool forward) {
@@ -274,40 +299,38 @@ static void complexfft_compute2(
     xr = xi;
     xi = tmp;
   }
-  complexfft_compute_recursive(self, xr, xi, self->logn);
-  if (self->logn > 1) {
-    complexfft_bit_reverse_permute(self, xr, self->logn);
-    complexfft_bit_reverse_permute(self, xi, self->logn);
+  ComplexfftComputeRecursive(xr, xi, logn_);
+  if (logn_ > 1) {
+    BitReversePermute(xr, logn_);
+    BitReversePermute(xi, logn_);
   }
 }
 
 
-static void
-complexfft_compute(
-    const pk_srfft_t *self,
+void SRFFT::ComplexFFTCompute(
     float *x,
     int xsize,
     bool forward,
     float *buffer,
     int buffer_size) {
-  assert(xsize == self->N * 2 && "complexfft_compute: invalid xsize");
-  assert(buffer_size >= self->N && "complexfft_compute: buffer_size too small");
+  assert(xsize == N_ * 2 && "complexfft_compute: invalid xsize");
+  assert(buffer_size >= N_ && "complexfft_compute: buffer_size too small");
 
-  for (int i = 0; i < self->N; i++) {
+  for (int i = 0; i < N_; i++) {
     x[i] = x[i * 2];  // put the real part in the first half of x.
     buffer[i] = x[i * 2 + 1];  // put the imaginary part in temp_buffer.
   }
   // copy the imaginary part back to the second half of x.
-  memcpy((void *)(x + self->N),
+  memcpy((void *)(x + N_),
          (void *)buffer,
-         sizeof(float) * self->N);
+         sizeof(float) * N_);
 
-  complexfft_compute2(self, x, x + self->N, forward);
+  ComplexFFTCompute2(x, x + N_, forward);
   // Now change the format back to interleaved.
   memcpy((void *)buffer,
-         (void *)(x + self->N),
-         sizeof(float) * self->N);
-  for (int i = self->N - 1; i > 0; i--) {  // don't include 0,
+         (void *)(x + N_),
+         sizeof(float) * N_);
+  for (int i = N_ - 1; i > 0; i--) {  // don't include 0,
     // in case MatrixIndexT (now it's int) is unsigned, the loop would not
     // terminate. Treat it as a special case.
     x[i * 2] = x[i];
@@ -316,69 +339,44 @@ complexfft_compute(
   x[1] = buffer[0];  // special case of i = 0.
 }
 
-inline void complex_im_exp(float x, float *a_re, float *a_im) {
-  *a_re = cos(x);
-  *a_im = sin(x);
-}
-
-//! ComplexMul implements, inline, the complex multiplication b *= a.
-inline void complex_mul(float a_re, float a_im, float *b_re, float *b_im) {
-  float tmp_re = (*b_re * a_re) - (*b_im * a_im);
-  *b_im = *b_re * a_im + *b_im * a_re;
-  *b_re = tmp_re;
-}
-
-inline void complex_add_product(
-    float a_re,
-    float a_im,
-    float b_re,
-    float b_im,
-    float *c_re,
-    float *c_im) {
-  *c_re += b_re * a_re - b_im * a_im;
-  *c_im += b_re * a_im + b_im * a_re;
-}
-
-
-void pk_srfft_init(pk_srfft_t *self, int N) {
+SRFFT::SRFFT(int N) {
   N /= 2;
   if ( (N & (N-1)) != 0 || N <= 1) {
     assert(false && "pk_srfft_init called with invalid number of points.");
   }
 
-  self->N = N;
-  self->logn = 0;
+  N_ = N;
+  logn_ = 0;
   while (N > 1) {
     N >>= 1;
-    ++self->logn;
+    ++logn_;
   }
-  compute_tables(self);
+  ComputeTable();
 }
 
-void pk_srfft_destroy(pk_srfft_t *self) {
-  free(self->brseed);
-  if (self->tab != NULL) {
-    for (int i = 0; i < self->logn - 3; i++) {
-      free(self->tab[i]);
+SRFFT::~SRFFT() {
+  free(brseed_);
+  if (tab_ != NULL) {
+    for (int i = 0; i < logn_ - 3; i++) {
+      free(tab_[i]);
     }
-    free(self->tab);
+    free(tab_);
   }
 }
 
 
 // This code is mostly the same as the RealFft function.  It would be
 // possible to replace it with more efficient code from Rico's book.
-void pk_srfft_compute(
-    const pk_srfft_t *self,
+void SRFFT::Compute(
     float *data,
     int data_size,
     bool forward,
     float *buffer,
     int buffer_size) {
-  int N = self->N * 2, N2 = self->N;
+  int N = N_ * 2, N2 = N_;
   if (forward) {
     // call to base class
-    complexfft_compute(self, data, data_size, true, buffer, buffer_size);
+    ComplexFFTCompute(data, data_size, true, buffer, buffer_size);
   } 
     
   // exp(-2pi/N), forward; exp(2pi/N), backward
@@ -451,7 +449,7 @@ void pk_srfft_compute(
   }
   
   if (!forward) {  // call to base class
-    complexfft_compute(self, data, data_size, false, buffer, buffer_size);
+    ComplexFFTCompute(data, data_size, false, buffer, buffer_size);
     for (int i = 0; i < N; i++)
       data[i] *= 2.0;
     // This is so we get a factor of N increase, rather than N/2 which we would
@@ -459,3 +457,5 @@ void pk_srfft_compute(
     // It's for consistency with our normal FFT convensions.
   }
 }
+
+}  // namespace pocketkaldi

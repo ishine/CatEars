@@ -7,27 +7,20 @@
 #include "pocketkaldi.h"
 #include "util.h"
 
+using pocketkaldi::SymbolTable;
+using pocketkaldi::Status;
+
 void TestSymbolTable() {
-  pk_status_t status;
-  pk_status_init(&status);
+  SymbolTable symbol_table;
+  Status status = symbol_table.Read(TESTDIR "data/symboltable_test.bin");
+  puts("22");
+  assert(status.ok());
 
-  pk_readable_t *fd = pk_readable_open(
-      TESTDIR "data/symboltable_test.bin",
-      &status);
-  assert(status.ok);
-
-  pk_symboltable_t symbol_table;
-  pk_symboltable_init(&symbol_table);
-  pk_symboltable_read(&symbol_table, fd, &status);
-  assert(status.ok);
-
-  assert(strcmp(pk_symboltable_get(&symbol_table, 0), "hello") == 0);
-  assert(strcmp(pk_symboltable_get(&symbol_table, 1), "world") == 0);
-  assert(strcmp(pk_symboltable_get(&symbol_table, 2), "cat") == 0);
-  assert(strcmp(pk_symboltable_get(&symbol_table, 3), "milk") == 0);
-
-  pk_symboltable_destroy(&symbol_table);
-  pk_readable_close(fd);
+  puts("33");
+  assert(strcmp(symbol_table.Get(0), "hello") == 0);
+  assert(strcmp(symbol_table.Get(1), "world") == 0);
+  assert(strcmp(symbol_table.Get(2), "cat") == 0);
+  assert(strcmp(symbol_table.Get(3), "milk") == 0);
 }
 
 int main() {

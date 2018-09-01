@@ -13,8 +13,10 @@
 
 using pocketkaldi::Fbank;
 using pocketkaldi::Vector;
+using pocketkaldi::Matrix;
 using pocketkaldi::Read16kPcm;
 using pocketkaldi::Status;
+using pocketkaldi::SubVector;
 
 void TestFbank() {
   std::string wav_file = TESTDIR "data/en-us-hello.wav";
@@ -29,15 +31,14 @@ void TestFbank() {
 
   // Calculate fbank feature
   Fbank fbank;
-  pk_matrix_t fbank_feat;
-  pk_matrix_init(&fbank_feat, 0, 0);
+  Matrix<float> fbank_feat;
 
   fbank.Compute(pcm_data, &fbank_feat);
   std::vector<float> fbank_featvec;
-  for (int i = 0; i < fbank_feat.ncol; ++i) {
-    pk_vector_t col = pk_matrix_getcol(&fbank_feat, i);
-    for (int j = 0; j < col.dim; ++j) {
-      fbank_featvec.push_back(col.data[j]);
+  for (int i = 0; i < fbank_feat.NumRows(); ++i) {
+    SubVector<float> row = fbank_feat.Row(i);
+    for (int j = 0; j < row.Dim(); ++j) {
+      fbank_featvec.push_back(row(j));
     }
   }
 
@@ -52,8 +53,6 @@ void TestFbank() {
     ++line_count;
   }
   assert(line_count == 1880);
-
-  pk_matrix_destroy(&fbank_feat);
 }
 
 

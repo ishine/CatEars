@@ -262,20 +262,18 @@ Status Nnet::Read(util::ReadableFile *fd) {
   return Status::OK();
 }
 
-void Nnet::Propagate(const pk_matrix_t *in, pk_matrix_t *out) const {
-  SubMatrix<float> input(in->data, in->ncol, in->nrow, in->nrow);
+void Nnet::Propagate(const MatrixBase<float> &in, Matrix<float> *out) const {
   Matrix<float> layer_input, layer_output;
   
-  layer_input.Resize(input.NumRows(), input.NumCols());
-  layer_input.CopyFromMat(input);
+  layer_input.Resize(in.NumRows(), in.NumCols());
+  layer_input.CopyFromMat(in);
   for (const std::unique_ptr<Layer> &layer : layers_) {
     layer->Propagate(layer_input, &layer_output);
     layer_input.Swap(&layer_output);
   }
 
-  pk_matrix_resize(out, layer_input.NumCols(), layer_input.NumRows());
-  SubMatrix<float> output(out->data, out->ncol, out->nrow, out->nrow);
-  output.CopyFromMat(layer_input);
+  out->Resize(layer_input.NumRows(), layer_input.NumCols());
+  out->CopyFromMat(layer_input);
 }
 
 }  // namespace pocketkaldi

@@ -185,7 +185,7 @@ class Nnet {
   Status Read(util::ReadableFile *fd);
 
   // Propogate batch matrix through this neural network
-  void Propagate(const pk_matrix_t *in, pk_matrix_t *out) const;
+  void Propagate(const MatrixBase<float> &in, Matrix<float> *out) const;
 
  private:
   std::vector<std::unique_ptr<Layer>> layers_;

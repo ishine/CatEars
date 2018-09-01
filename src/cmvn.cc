@@ -36,9 +36,7 @@ void CMVN::ComputeStats(int frame, Vector<float> *stats) {
   // Currently we only support compute frame by frame. Random frame computation
   // will be implemented when needed (like ring buffer based cache in Kaldi)
   assert(cached_frame_ == frame - 1);
-
-  pk_vector_t c_feats = pk_matrix_getcol(raw_feats_, frame);
-  SubVector<float> feats(c_feats.data, c_feats.dim);
+  SubVector<float> feats = raw_feats_.Row(frame);
 
   // We do the computation in double
   Vector<double> stats_dbl(PK_FBANK_DIM + 1);
@@ -56,8 +54,7 @@ void CMVN::ComputeStats(int frame, Vector<float> *stats) {
   // Subtract the stats of previous (slideing window)
   int prev_frame = frame - PK_ONLINECMVN_WINDOW;
   if (prev_frame >= 0) {
-    pk_vector_t c_prev_feats = pk_matrix_getcol(raw_feats_, prev_frame);
-    SubVector<float> prev_feats(c_prev_feats.data, c_prev_feats.dim);
+    SubVector<float> prev_feats = raw_feats_.Row(prev_frame);
     stats_dbl.Range(0, PK_FBANK_DIM).AddVec(-1.0f, prev_feats);
     stats_dbl(PK_FBANK_DIM) -= 1.0;
   }
@@ -100,7 +97,7 @@ void CMVN::Apply(const VectorBase<float> &stats, VectorBase<float> *feats) {
   feats->AddVec(-scale, stats.Range(0, feats->Dim()));
 }
 
-void CMVN::GetFrame(int frame, pk_vector_t *feats) {
+void CMVN::GetFrame(int frame, VectorBase<float> *feats) {
   Vector<float> stats;
 
   // Calculate and smooth stats
@@ -108,24 +105,20 @@ void CMVN::GetFrame(int frame, pk_vector_t *feats) {
   SmoothStats(&stats);
 
   // Apply CMVN with stats
-  pk_vector_t raw_frame = pk_matrix_getcol(raw_feats_, frame);
-  pk_vector_copy(feats, &raw_frame);
-  SubVector<float> frame_feats(feats->data, feats->dim);
-  Apply(stats, &frame_feats);
+  feats->CopyFromVec(raw_feats_.Row(frame));
+  Apply(stats, feats);
 }
 
 
-CMVN::CMVN(const pk_vector_t *global_stats, const pk_matrix_t *raw_feats) {
-  global_stats_.Resize(global_stats->dim);
-  global_stats_.CopyFromVec(SubVector<float>(
-      global_stats->data,
-      global_stats->dim));
-  raw_feats_ = raw_feats;
+CMVN::CMVN(const Vector<float> &global_stats, const Matrix<float> &raw_feats) {
+  raw_feats_.Resize(raw_feats.NumRows(), raw_feats.NumCols());
+  raw_feats_.CopyFromMat(raw_feats);
+  global_stats_.Resize(global_stats.Dim());
+  global_stats_.CopyFromVec(global_stats);
   cached_frame_ = -1;
 }
 
 CMVN::~CMVN() {
-  raw_feats_ = nullptr;
   cached_frame_ = 0;
 }
 
