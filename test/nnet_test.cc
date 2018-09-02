@@ -18,6 +18,7 @@ using pocketkaldi::Matrix;
 using pocketkaldi::SubMatrix;
 using pocketkaldi::Vector;
 using pocketkaldi::SubVector;
+using pocketkaldi::NarrowLayer;
 
 bool CheckEq(float a, float b) {
   return fabs(a - b) < 1e-3;
@@ -189,6 +190,37 @@ void TestBatchNormLayer() {
   assert(CheckVector(y.Row(3), {-1.0793, -1.3745,  1.1110}));
 }
 
+void TestNarrowLayer() {
+  NarrowLayer narrow_layer(1, 2);
+
+  // Matrix W
+  float W_data[] = {
+    0.1, 0.8, 0.9,
+    0.4, 0.2, 0.7,
+    0.2, 0.1, 0.1,
+    0.4, 0.3, 0.2,
+    0.5, 0.6, 0.7
+  };
+  SubMatrix<float> W(W_data, 5, 3, 3);
+  Matrix<float> y;
+  narrow_layer.Propagate(W, &y);
+
+  // Check results
+  assert(y.NumCols() == 3 && y.NumRows() == 2);
+  assert(CheckVector(y.Row(0), {0.4, 0.2, 0.7}));
+  assert(CheckVector(y.Row(1), {0.2, 0.1, 0.1}));
+
+  // Check smaller matrix
+  SubMatrix<float> W2(W_data, 3, 3, 3);
+  narrow_layer.Propagate(W2, &y);
+
+  // Check results
+  assert(y.NumCols() == 3 && y.NumRows() == 3);
+  assert(CheckVector(y.Row(0), {0.1, 0.8, 0.9}));
+  assert(CheckVector(y.Row(1), {0.4, 0.2, 0.7}));
+  assert(CheckVector(y.Row(2), {0.2, 0.1, 0.1}));
+}
+
 int main() {
   TestLinearLayer();
   TestSoftmaxLayer();
@@ -197,5 +229,6 @@ int main() {
   TestNormalizeLayer();
   TestSpliceLayer();
   TestBatchNormLayer();
+  TestNarrowLayer();
   return 0;
 }

@@ -195,7 +195,46 @@ void NormalizeLayer::Propagate(
   }
 }
 
-Nnet::Nnet() {
+
+NarrowLayer::NarrowLayer(): narrow_left_(-1), narrow_right_(-1) {}
+NarrowLayer::NarrowLayer(int narrow_left, int narrow_right):
+    narrow_left_(narrow_left), narrow_right_(narrow_right) {}
+
+void NarrowLayer::Propagate(
+    const MatrixBase<float> &in,
+    Matrix<float> *out) const {
+  assert(narrow_left_ >= 0 && "NarrowLayer is not initialized");
+  if (in.NumRows() <= narrow_left_ + narrow_right_) {
+    // Do nothing if no enough rows to narrow
+    out->Resize(in.NumRows(), in.NumCols());
+    out->CopyFromMat(in);
+  } else {
+    out->Resize(
+        in.NumRows() - narrow_left_ - narrow_right_,
+        in.NumCols());
+    SubMatrix<float> narrow(
+        in,
+        narrow_left_,
+        in.NumRows() - narrow_left_ - narrow_right_,
+        0,
+        in.NumCols());
+    out->CopyFromMat(narrow);
+  }
+}
+
+Status NarrowLayer::Read(util::ReadableFile *fd) {
+  int32_t narrow_left = 0;
+  PK_CHECK_STATUS(fd->ReadValue<int32_t>(&narrow_left));
+
+  int32_t narrow_right = 0;
+  PK_CHECK_STATUS(fd->ReadValue<int32_t>(&narrow_right));
+
+  narrow_right_ = narrow_right;
+  narrow_left_ = narrow_left;
+}
+
+
+Nnet::Nnet(): left_context_(0), right_context_(0) {
 }
 
 Status Nnet::ReadLayer(util::ReadableFile *fd) {
@@ -233,6 +272,9 @@ Status Nnet::ReadLayer(util::ReadableFile *fd) {
   case Layer::kLogSoftmax:
     layer = std::unique_ptr<Layer>(new LogSoftmaxLayer());
     break;
+  case Layer::kNarrow:
+    layer = std::unique_ptr<Layer>(new NarrowLayer());
+    break;
   default:
     return Status::Corruption(util::Format(
         "read_layer: unexpected layer type: {} ({})",
@@ -251,7 +293,14 @@ Status Nnet::Read(util::ReadableFile *fd) {
   // Read section name
   PK_CHECK_STATUS(fd->ReadAndVerifyString(PK_NNET_SECTION));
 
-  int num_layers;
+  int32_t left_context = 0, right_context = 0;
+  PK_CHECK_STATUS(fd->ReadValue<int32_t>(&left_context));
+  PK_CHECK_STATUS(fd->ReadValue<int32_t>(&right_context));
+  left_context_ = left_context;
+  right_context_ = right_context;
+
+
+  int32_t num_layers;
   PK_CHECK_STATUS(fd->ReadValue<int32_t>(&num_layers));
 
   // Read each layers

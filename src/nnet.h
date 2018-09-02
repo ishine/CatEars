@@ -8,7 +8,7 @@
 #include "util.h"
 #include "gemm.h"
 
-#define PK_NNET_SECTION "NN01"
+#define PK_NNET_SECTION "NN02"
 #define PK_NNET_LAYER_SECTION "LAY0"
 
 
@@ -25,7 +25,8 @@ class Layer {
     kSoftmax = 3,
     kSplice = 6,
     kBatchNorm = 7,
-    kLogSoftmax = 8
+    kLogSoftmax = 8,
+    kNarrow = 9
   };
 
   // Propogate a batch of input vectors through this layer. And the batch of
@@ -174,6 +175,26 @@ class NormalizeLayer : public Layer {
   std::string Type() const override { return "Normalize"; }
 };
 
+class NarrowLayer : public Layer {
+ public:
+  NarrowLayer();
+  NarrowLayer(int narrow_left, int narrow_right);
+
+  void Propagate(
+      const MatrixBase<float> &in,
+      Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override;
+
+  // Implements interface Layer
+  std::string Type() const override { return "NarrowLayer"; }
+
+ private:
+  int narrow_left_;
+  int narrow_right_;
+};
+
 // The neural network class. It have a stack of different kinds of `Layer`
 // instances. And the batch matrix could be propogate through this neural
 // network using `Propagate` method
@@ -187,11 +208,18 @@ class Nnet {
   // Propogate batch matrix through this neural network
   void Propagate(const MatrixBase<float> &in, Matrix<float> *out) const;
 
+  // Returns the left and right context of nnet
+  int left_context() const { return left_context_; }
+  int right_context() const { return right_context_; }
+
  private:
   std::vector<std::unique_ptr<Layer>> layers_;
 
   // Read a layer from `fd` and store into layers_
   Status ReadLayer(util::ReadableFile *fd);
+
+  int left_context_;
+  int right_context_;
 };
 
 }  // namespace pocketkaldi

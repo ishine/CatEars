@@ -46,7 +46,7 @@ class Configuration {
   }
   Status GetInteger(const std::string &key, int *val) const {
     int int_val = GetIntegerOrElse(key, INT_MIN);
-    if (int_val == LONG_MIN) return KeyNotFound(key);
+    if (int_val == INT_MIN) return KeyNotFound(key);
     *val = int_val;
     return Status::OK();
   }

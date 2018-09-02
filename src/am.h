@@ -42,8 +42,16 @@ class AcousticModel {
   Vector<float> log_prior_;
   int left_context_;
   int right_context_;
+  int chunk_size_;
   int num_pdfs_;
   Vector<int32_t> tid2pdf_;
+
+  // Prepare the input chunk from begin_frame. Chunk size is min(chunk_size_,
+  // frames.NumRow() - begin_frame). And return the chunk size;
+  int PrepareChunk(
+      const MatrixBase<float> &frames,
+      int begin_frame,
+      Matrix<float> *chunk);
 };
 
 }  // namespace pocketkaldi

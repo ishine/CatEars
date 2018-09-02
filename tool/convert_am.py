@@ -20,6 +20,7 @@ RELU_LAYER = 1
 SPLICE_LAYER = 6
 BATCHNORM_LAYER = 7
 LOGSOFTMAX_LAYER = 8
+NARROW_LAYER = 9
 
 class Layer:
     def write_vector(self, fd, vec):
@@ -117,10 +118,28 @@ class LogSoftmaxLayer(Layer):
         self.layer_name = 'LogSoftmaxLayer'
         self.layer_type = LOGSOFTMAX_LAYER
 
+class NarrowLayer(Layer):
+    def __init__(self, narrow_left, narrow_right):
+        self.layer_name = 'NarrowLayer'
+        self.layer_type = NARROW_LAYER
+        self.narrow_left = narrow_left
+        self.narrow_right = narrow_right
+
+    def write(self, fd):
+        super().write(fd)
+        fd.write(struct.pack("<i", self.narrow_left))
+        fd.write(struct.pack("<i", self.narrow_right))
+
+    def __str__(self):
+        return "{}: narrow = ({}, {})".format(
+            self.layer_name,
+            self.narrow_left,
+            self.narrow_right)
+
 class AM:
-    def __init__(self, layers):
-        self.left_context = 0
-        self.right_context = 0
+    def __init__(self, layers, left_context, right_context):
+        self.left_context = left_context
+        self.right_context = right_context
         self.prior = None
         self.layers = layers
 
@@ -136,8 +155,13 @@ class AM:
             output_dim = layer.output_dim(output_dim)
 
     def write(self, filename):
+        print('AM: left_context = {}, right_context = {}'.format(
+            self.left_context,
+            self.right_context))
         with open(filename + ".nnet", 'wb') as fd:
-            fd.write(b"NN01")
+            fd.write(b"NN02")
+            fd.write(struct.pack("<i", self.left_context))
+            fd.write(struct.pack("<i", self.right_context))
             fd.write(struct.pack("<i", len(self.layers)))
             for layer in self.layers:
                 layer.write(fd)
@@ -211,6 +235,8 @@ def parse_nnet3_desc(desc_text):
     prev_name = 'input'
     layers = []
     layer_dict = {}
+    context_left = 0
+    context_right = 0
     for line in lines:
         line = line.strip()
         if line == '':
@@ -241,11 +267,22 @@ def parse_nnet3_desc(desc_text):
                 layer_name = layer_comp + '_splice'
                 layer_dict[layer_name] = SpliceLayer(indices)
                 layers.append(layer_name)
+
+                # After splice we can narrow down the input matrix
+                layer_name = layer_comp + '_narrow'
+                narrow_left = -min(min(indices), 0)
+                narrow_right = max(max(indices), 0)
+                layer_dict[layer_name] = NarrowLayer(narrow_left, narrow_right)
+                layers.append(layer_name)
+
+                # Update context information
+                context_right += narrow_right
+                context_left += narrow_left
             else:
                 assert(layer_input == prev_name)
             layers.append(layer_comp)
             prev_name = layer_comp
-    return layers, layer_dict
+    return layers, layer_dict, (context_left, context_right)
 
 # Nnet token
 def read_nnet(model_text):
@@ -258,7 +295,7 @@ def read_nnet(model_text):
     print('num_components = {}'.format(num_components))
     print('------------------ nnet3_desc ------------------')
     print(nnet3_desc)
-    layers, layer_dict = parse_nnet3_desc(nnet3_desc)
+    layers, layer_dict, context = parse_nnet3_desc(nnet3_desc)
 
     # Tokens in Components
     print('------------------ read_layer ------------------')
@@ -301,14 +338,14 @@ def read_nnet(model_text):
         else:
             raise Exception('layer not found: ' + layer_name)
     
-    return layer_objects
+    return layer_objects, context
 
 if __name__ == '__main__':
     with open(from_file) as fd:
         model_text = fd.read()
 
-    layers = read_nnet(model_text)
-    am = AM(layers)
+    layers, context = read_nnet(model_text)
+    am = AM(layers, *context)
 
     # Prior
     remained_text = goto_token('Priors', model_text)
