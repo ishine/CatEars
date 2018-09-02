@@ -35,6 +35,7 @@ typedef struct pk_t {
   pocketkaldi::Fbank *fbank;
   pocketkaldi::Vector<float> *cmvn_global_stats;
   pocketkaldi::SymbolTable *symbol_table;
+  int enable_cmvn;
 } pk_t;
 
 // Initialize the status set to success (ok) state

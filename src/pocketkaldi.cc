@@ -45,6 +45,7 @@ void pk_init(pk_t *self) {
   self->cmvn_global_stats = NULL;
   self->symbol_table = NULL;
   self->fbank = NULL;
+  self->enable_cmvn = 0;
 }
 
 void pk_destroy(pk_t *self) {
@@ -62,10 +63,12 @@ void pk_destroy(pk_t *self) {
 
   delete self->fbank;
   self->fbank = NULL;
+
+  self->enable_cmvn = 0;
 }
 
-// Read CMVN stats
-Status ReadCMVNStats(pk_t *self, const Configuration &conf) {
+// Read CMVN 
+Status ReadCMVN(pk_t *self, const Configuration &conf) {
   // Get cmvn_stats filename from config file
   std::string filename = conf.GetPathOrElse("cmvn_stats", "");
   if (filename == "") {
@@ -78,6 +81,12 @@ Status ReadCMVNStats(pk_t *self, const Configuration &conf) {
   PK_CHECK_STATUS(fd.Open(filename));
   self->cmvn_global_stats = new Vector<float>();
   PK_CHECK_STATUS(self->cmvn_global_stats->Read(&fd));
+
+
+  // Read flag of CMVN
+  int enable_cmvn = 0;
+  PK_CHECK_STATUS(conf.GetInteger("enable_cmvn", &enable_cmvn));
+  self->enable_cmvn = enable_cmvn;
 
   return Status::OK();
 }
@@ -125,7 +134,7 @@ void pk_load(pk_t *self, const char *filename, pk_status_t *status) {
   if (!status_vn.ok()) goto pk_load_failed;
 
   // CMVN
-  status_vn = ReadCMVNStats(self, conf);
+  status_vn = ReadCMVN(self, conf);
   if (!status_vn.ok()) goto pk_load_failed;
 
   // AM
@@ -197,15 +206,20 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
   fputs(pocketkaldi::util::Format("Fbank: {}ms\n", ((float)t) / CLOCKS_PER_SEC  * 1000).c_str(), stderr);
 
   // Apply CMVN to raw_wave
-  t = clock();
-  CMVN cmvn(*recognizer->cmvn_global_stats, raw_feats);
   Matrix<float> feats(raw_feats.NumRows(), raw_feats.NumCols());
-  for (int frame = 0; frame < raw_feats.NumRows(); ++frame) {
-    SubVector<float> frame_raw = feats.Row(frame);
-    cmvn.GetFrame(frame, &frame_raw);
+  if (recognizer->enable_cmvn > 0) {
+    t = clock();
+    CMVN cmvn(*recognizer->cmvn_global_stats, raw_feats);
+    for (int frame = 0; frame < raw_feats.NumRows(); ++frame) {
+      SubVector<float> frame_raw = feats.Row(frame);
+      cmvn.GetFrame(frame, &frame_raw);
+    }
+    t = clock() - t;
+    fprintf(stderr, "CMVN: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
+  } else {
+    feats.CopyFromMat(raw_feats);
   }
-  t = clock() - t;
-  fprintf(stderr, "CMVN: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
+
 
   // Start to decode
   Decoder decoder(recognizer->fst);
