@@ -103,7 +103,8 @@ class SpliceLayer : public Layer {
 class BatchNormLayer : public Layer {
  public:
   BatchNormLayer();
-  BatchNormLayer(float eps);
+  BatchNormLayer(const VectorBase<float> &scale,
+                 const VectorBase<float> &offset);
 
   void Propagate(
       const MatrixBase<float> &in,
@@ -116,7 +117,8 @@ class BatchNormLayer : public Layer {
   std::string Type() const override { return "BatchNorm"; }
 
  private:
-  float eps_;
+  Vector<float> scale_;
+  Vector<float> offset_;
 };
 
 // Softmax layer
@@ -179,6 +181,27 @@ class NarrowLayer : public Layer {
  public:
   NarrowLayer();
   NarrowLayer(int narrow_left, int narrow_right);
+
+  void Propagate(
+      const MatrixBase<float> &in,
+      Matrix<float> *out) const override;
+
+  // Implements interface Layer
+  Status Read(util::ReadableFile *fd) override;
+
+  // Implements interface Layer
+  std::string Type() const override { return "NarrowLayer"; }
+
+ private:
+  int narrow_left_;
+  int narrow_right_;
+};
+
+// Applies a fixed per-element scale
+class ScaleLayer : public Layer {
+ public:
+  ScaleLayer();
+  ScaleLayer(int narrow_left, int narrow_right);
 
   void Propagate(
       const MatrixBase<float> &in,

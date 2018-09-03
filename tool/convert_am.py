@@ -101,17 +101,16 @@ class SpliceLayer(Layer):
         return "{}: indices = {}".format(self.layer_name, self.indices)
 
 class BatchNormLayer(Layer):
-    def __init__(self, eps):
+    def __init__(self, scale, offset):
         self.layer_name = 'BatchNormLayer'
         self.layer_type = BATCHNORM_LAYER
-        self.eps = eps
+        self.scale = scale
+        self.offset = offset
 
     def write(self, fd):
         super().write(fd)
-        fd.write(struct.pack("<f", self.eps))
-
-    def __str__(self):
-        return "{}: eps = {}".format(self.layer_name, self.eps)
+        self.write_vector(fd, self.scale)
+        self.write_vector(fd, self.offset)
 
 class LogSoftmaxLayer(Layer):
     def __init__(self):
@@ -226,6 +225,12 @@ def read_matrix(text, num_type = float):
             raise Exception('Row number mismatch')
     return np.array(matrix_cols), remained
 
+def compute_batch_norm(mean, var, eps, target_rms):
+    offset = -mean
+    scale = np.power(var + eps, -0.5) * target_rms
+    offset = np.multiply(offset, scale)
+    return scale, offset
+
 re_component = re.compile(r'^component-node name=(.*?) component=(.*?) input=(.*?)$')
 re_input = re.compile(r'^Append\((.*)\)$')
 re_split = re.compile(r'(Offset\([\w\.]+, *-?\d+\)|[\w\.]+)')
@@ -320,8 +325,15 @@ def read_nnet(model_text):
             layer_dict[comp_name] = ReluLayer()
         elif token_tag == 'BatchNormComponent':
             content_text = goto_token('Epsilon', content_text)
-            eps, _ = read_float(content_text)
-            layer_dict[comp_name] = BatchNormLayer(eps)
+            eps, content_text = read_float(content_text)
+            content_text = goto_token('TargetRms', content_text)
+            target_rms, content_text = read_float(content_text)
+            content_text = goto_token('StatsMean', content_text)
+            mean, content_text = read_matrix(content_text)
+            content_text = goto_token('StatsVar', content_text)
+            var, content_text = read_matrix(content_text)
+            scale, offset = compute_batch_norm(mean[0], var[0], eps, target_rms)
+            layer_dict[comp_name] = BatchNormLayer(scale, offset)
         elif token_tag == 'LogSoftmaxComponent':
             layer_dict[comp_name] = LogSoftmaxLayer()
         else:

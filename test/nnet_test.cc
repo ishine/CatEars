@@ -170,24 +170,26 @@ void TestNormalizeLayer() {
 }
 
 void TestBatchNormLayer() {
-  BatchNormLayer batch_norm(1e-5f);
+  // Vector scale
+  float scale_data[] = {0.1, 0.2, 0.3};
+  SubVector<float> scale(scale_data, 3);
+  // Vector offset
+  float offset_data[] = {0.1, 0.2, 0.3};
+  SubVector<float> offset(offset_data, 3);
+  BatchNormLayer batch_norm(scale, offset);
 
   float x_data[] = {
-    0.6926, 0.5312, 0.3551,
-    0.1014, 0.4569, 0.6337,
-    0.5657, 0.8495, 0.8210,
-    0.0483, 0.1684, 0.9234
+    0.1, 0.1, 0.1,
+    0.2, 0.2, 0.2,
   };
-  SubMatrix<float> x(x_data, 4, 3, 3);
+  SubMatrix<float> x(x_data, 2, 3, 3);
   Matrix<float> y;
   batch_norm.Propagate(x, &y);
 
   // Check results
-  assert(y.NumCols() == 3 && y.NumRows() == 4);
-  assert(CheckVector(y.Row(0), {1.2105,  0.1228, -1.5185}));
-  assert(CheckVector(y.Row(1), {-0.8905, -0.1840, -0.2297}));
-  assert(CheckVector(y.Row(2), {0.7593,  1.4357,  0.6372}));
-  assert(CheckVector(y.Row(3), {-1.0793, -1.3745,  1.1110}));
+  assert(y.NumCols() == 3 && y.NumRows() == 2);
+  assert(CheckVector(y.Row(0), {0.11, 0.22, 0.33}));
+  assert(CheckVector(y.Row(1), {0.12, 0.24, 0.36}));
 }
 
 void TestNarrowLayer() {

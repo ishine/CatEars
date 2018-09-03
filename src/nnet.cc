@@ -96,52 +96,31 @@ Status SpliceLayer::Read(util::ReadableFile *fd) {
   return Status::OK();
 }
 
-BatchNormLayer::BatchNormLayer(): eps_(-1) {}
-BatchNormLayer::BatchNormLayer(float eps): eps_(eps) {}
+BatchNormLayer::BatchNormLayer() {}
+BatchNormLayer::BatchNormLayer(const VectorBase<float> &scale,
+                               const VectorBase<float> &offset) {
+  scale_.Resize(scale.Dim());
+  scale_.CopyFromVec(scale);
+  offset_.Resize(offset.Dim());
+  offset_.CopyFromVec(offset);
+}
 
 void BatchNormLayer::Propagate(
     const MatrixBase<float> &in,
     Matrix<float> *out) const {
-  assert(eps_ >= 0 && "BatchNormLayer is not initialized");
-  Vector<float> mean(in.NumCols(), Vector<float>::kSetZero);
-  Vector<float> scale(in.NumCols(), Vector<float>::kSetZero);
-
-  for (int r = 0; r < in.NumRows(); ++r) {
-    for (int c = 0; c < in.NumCols(); ++c) {
-      mean(c) += in(r, c);
-      scale(c) += in(r, c) * in(r, c);
-    }
-  }
-
-  mean.Scale(1.0f / in.NumRows());
-
-  Vector<float> mean2(mean.Dim());
-  mean2.CopyFromVec(mean);
-  mean2.ApplyPow(2);
-
-  // Currently scale is VAR(x)
-  scale.Scale(1.0f / in.NumRows());
-  scale.AddVec(-1.0, mean2);
-
-  // Scale = 1 / sqrt(VAR(x) + eps)
-  scale.Add(eps_);
-  scale.ApplyFloor(1e-5);
-  scale.ApplyPow(-0.5f);
-
-  // Write to out
+  assert(scale_.Dim() > 0 && "BatchNormLayer is not initialized");
   out->Resize(in.NumRows(), in.NumCols());
-  for (int r = 0; r < in.NumRows(); ++r) {
-    SubVector<float> row = out->Row(r);
-    row.CopyFromVec(in.Row(r));
-    row.AddVec(-1.0f, mean);
-    row.MulElements(scale);
+  out->CopyFromMat(in);
+  for (int row_idx = 0; row_idx < out->NumRows(); ++row_idx) {
+    SubVector<float> row = out->Row(row_idx);
+    row.MulElements(scale_);
+    row.AddVec(1.0, offset_);
   }
 }
 
 Status BatchNormLayer::Read(util::ReadableFile *fd) {
-  float eps = 0;
-  PK_CHECK_STATUS(fd->ReadValue<float>(&eps));
-  eps_ = eps;
+  PK_CHECK_STATUS(scale_.Read(fd));
+  PK_CHECK_STATUS(offset_.Read(fd));
 }
 
 void SoftmaxLayer::Propagate(
