@@ -8,52 +8,52 @@
 
 namespace pocketkaldi {
 
-SymbolTable::SymbolTable(): size_(0) {}
+char kBosSymbol[] = "<s>";
+char kEosSymbol[] = "</s>";
+
+SymbolTable::SymbolTable(): bos_id_(0), eos_id_(0) {}
 
 Status SymbolTable::Read(const std::string &filename) {
   util::ReadableFile fd;
   PK_CHECK_STATUS(fd.Open(filename));
-  PK_CHECK_STATUS(fd.ReadAndVerifyString(PK_SYMBOLTABLE_SECTION));
 
-  int32_t section_size = 0;
-  PK_CHECK_STATUS(fd.ReadValue<int32_t>(&section_size));
+  Status status = Status::OK();
+  std::string line;
+  words_.reserve(65536);
+  while (fd.ReadLine(&line, &status) && status.ok()) {
+    std::vector<std::string> fields = util::Split(line, " ");
+    if (fields.size() != 2) {
+      return Status::Corruption(util::Format(
+          "2 column expected but {} found: {}",
+          fields.size(),
+          line));
+    }
 
-  int32_t table_size = 0;
-  int32_t buffer_size = 0;
-  PK_CHECK_STATUS(fd.ReadValue<int32_t>(&table_size));
-  PK_CHECK_STATUS(fd.ReadValue<int32_t>(&buffer_size));
-  size_ = table_size;
-
-  // Check section size
-  int expected_size = 8 + table_size * sizeof(int) + buffer_size;
-  if (section_size != expected_size) {
-    return Status::Corruption(util::Format(
-        "pk_symboltable_read: section_size = {} expected, but {} found ({})",
-        expected_size,
-        section_size,
-        filename));
+    std::string word = fields[0];
+    long word_id = 0;
+    PK_CHECK_STATUS(util::StringToLong(fields[1], &word_id));
+    
+    word_ids_[word] = word_id;
+    if (word_id >= words_.size()) words_.resize(word_id + 1);
+    words_[word_id] = word;
   }
+  PK_CHECK_STATUS(status);
 
-  // Read index
-  buffer_index_.resize(table_size);
-  int32_t index = 0;
-  for (int i = 0; i < table_size; ++i) {
-    PK_CHECK_STATUS(fd.ReadValue<int32_t>(&index));
-    buffer_index_[i] = index;
+  // Find BOS and EOS ids
+  if (word_ids_.find(kBosSymbol) == word_ids_.end() ||
+      word_ids_.find(kEosSymbol) == word_ids_.end()) {
+    return Status::Corruption("symbol_table: unable to find BOS/EOS symbol");
   }
-
-  // Read buffer
-  buffer_.resize(buffer_size);
-  fd.Read(buffer_.data(), buffer_size);
+  bos_id_ = word_ids_[kBosSymbol];
+  eos_id_ = word_ids_[kEosSymbol];
 
   return Status::OK();
 }
 
 const char *SymbolTable::Get(int symbol_id) {
-  assert(symbol_id < size_ && "symbol_id out of boundary");
-  int idx = buffer_index_[symbol_id];
-  assert(idx < buffer_.size() && "symbol index out of boundary");
-  return buffer_.data() + idx;
+  assert(symbol_id < words_.size() && "symbol_id out of boundary");
+  return words_[symbol_id].c_str();
 }
+
 
 }  // namespace pocketkaldi

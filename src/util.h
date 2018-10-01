@@ -113,6 +113,9 @@ std::vector<std::string> Split(
 // String tolower
 std::string Tolower(const std::string &str);
 
+// Converts a string to long.
+Status StringToLong(const std::string &str, long *val);
+
 // A wrapper of FILE in stdio.h
 class ReadableFile {
  public:

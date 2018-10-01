@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <array>
 #include <algorithm>
 
@@ -88,6 +89,18 @@ std::string Tolower(const std::string &str) {
   std::string lower(str.begin(), str.end());
   std::transform(lower.begin(), lower.end(), lower.begin(), tolower);
   return lower;
+}
+
+
+Status StringToLong(const std::string &str, long *val) {
+  std::string trim_str = Trim(str);
+  char *end = nullptr;
+  *val = strtol(trim_str.c_str(), &end, 0);
+  if (*end != '\0') {
+    return Status::Corruption(Format("unexpected number string: {}", trim_str));
+  }
+  
+  return Status::OK();
 }
 
 

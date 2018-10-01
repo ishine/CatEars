@@ -12,15 +12,17 @@ using pocketkaldi::Status;
 
 void TestSymbolTable() {
   SymbolTable symbol_table;
-  Status status = symbol_table.Read(TESTDIR "data/symboltable_test.bin");
-  puts("22");
+  Status status = symbol_table.Read(TESTDIR "data/lm.words.txt");
   assert(status.ok());
 
-  puts("33");
-  assert(strcmp(symbol_table.Get(0), "hello") == 0);
-  assert(strcmp(symbol_table.Get(1), "world") == 0);
-  assert(strcmp(symbol_table.Get(2), "cat") == 0);
-  assert(strcmp(symbol_table.Get(3), "milk") == 0);
+
+  assert(strcmp(symbol_table.Get(958), "marisa") == 0);
+  assert(strcmp(symbol_table.Get(1272), "reimu") == 0);
+  assert(strcmp(symbol_table.Get(1839), "zun") == 0);
+  assert(strcmp(symbol_table.Get(0), "<eps>") == 0);
+
+  assert(symbol_table.bos_id() == 2);
+  assert(symbol_table.eos_id() == 1);
 }
 
 int main() {

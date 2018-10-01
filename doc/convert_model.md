@@ -1,3 +1,9 @@
+# Convert FST
+
+```bash
+```
+
+
 # Convert CMVN Statistics
 
 Before covnverting, we need to compute global CMVN statistics. Goto s5 directory and run
@@ -36,10 +42,7 @@ num_pdfs = XXXX
 convert_trans.py will output number of pdf in the model in `num_pdfs = XXXX`. Remember this value, it will be used in config file.
 
 
-# Convert Vocabulary
+# Copy Vocabulary
 
-Vocbulary (or Symbol Table) is a map from word-id to word. word-id is usually the output of HCLG graph.
+The vocabulary file from Kaldi (aka words.txt) could be used directly in pasco decoder. We can just copy it to model dir. 
 
-```bash
-$ python3 $POCKETKALDI_DIR/tool/convert_words.py exp/tri5a/graph/words.txt vocab.bin
-```

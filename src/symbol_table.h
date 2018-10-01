@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include "status.h"
 #include "util.h"
 
@@ -24,10 +25,16 @@ class SymbolTable {
   // Get symbol by id
   const char *Get(int symbol_id);
 
+  // Ids for BOS/EOS tag
+  int bos_id() const { return bos_id_; }
+  int eos_id() const { return eos_id_; }
+
  private:
-  int size_;
-  std::vector<char> buffer_;
-  std::vector<int> buffer_index_;
+  std::vector<std::string> words_;
+  std::unordered_map<std::string, int> word_ids_;
+
+  int bos_id_;
+  int eos_id_;
 };
 
 }  // namespace pocketkaldi
