@@ -224,8 +224,8 @@ void VectorBase<Real>::AddVec(
     const VectorBase<OtherReal> &v) {
   assert(dim_ == v.dim_);
   // remove __restrict__ if it causes compilation problems.
-  register Real *__restrict__ data = data_;
-  register OtherReal *__restrict__ other_data = v.data_;
+  Real *__restrict__ data = data_;
+  OtherReal *__restrict__ other_data = v.data_;
   int dim = dim_;
   if (alpha != 1.0) {
     for (int i = 0; i < dim; i++) {

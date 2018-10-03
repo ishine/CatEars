@@ -9,21 +9,25 @@
 #include "status.h"
 #include "util.h"
 
-#define PK_SYMBOLTABLE_SECTION "SYM0"
-
 namespace pocketkaldi {
 
 // Store a list of symbols. And the symbol string could be got by
 //   SymbolTable::Get(symbol_id)
 class SymbolTable {
  public:
+  static constexpr int kNotExist = -1;
+
   SymbolTable();
   
   // Read synbol table file
   Status Read(const std::string &filename);
 
   // Get symbol by id
-  const char *Get(int symbol_id);
+  const char *Get(int symbol_id) const;
+
+  // Get word-id by word text. If the word not exist in symbol table, return
+  // kNotExist
+  int GetId(const std::string &word) const;
 
   // Ids for BOS/EOS tag
   int bos_id() const { return bos_id_; }

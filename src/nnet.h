@@ -129,7 +129,7 @@ class SoftmaxLayer : public Layer {
       Matrix<float> *out) const override;
 
   // Implements interface Layer
-  Status Read(util::ReadableFile *fd) override {};
+  Status Read(util::ReadableFile *fd) override { return Status::OK(); };
 
   // Implements interface Layer
   std::string Type() const override { return "Softmax"; }
@@ -143,7 +143,7 @@ class LogSoftmaxLayer : public Layer {
       Matrix<float> *out) const override;
 
   // Implements interface Layer
-  Status Read(util::ReadableFile *fd) override {};
+  Status Read(util::ReadableFile *fd) override { return Status::OK(); };
 
   // Implements interface Layer
   std::string Type() const override { return "LogSoftmax"; }
@@ -157,7 +157,7 @@ class ReLULayer : public Layer {
       Matrix<float> *out) const override;
 
   // Implements interface Layer
-  Status Read(util::ReadableFile *fd) override {};
+  Status Read(util::ReadableFile *fd) override { return Status::OK(); };
 
   // Implements interface Layer
   std::string Type() const override { return "ReLU"; }
@@ -171,7 +171,7 @@ class NormalizeLayer : public Layer {
       Matrix<float> *out) const override;
 
   // Implements interface Layer
-  Status Read(util::ReadableFile *fd) override {};
+  Status Read(util::ReadableFile *fd) override { return Status::OK(); };
 
   // Implements interface Layer
   std::string Type() const override { return "Normalize"; }

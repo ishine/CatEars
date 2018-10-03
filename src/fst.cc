@@ -7,12 +7,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <array>
+#include <algorithm>
 
 namespace pocketkaldi {
 
 const char *Fst::kSectionName = "pk::fst_0";
 
-Fst::Fst() : start_state_(0) {}
+Fst::Arc::Arc() {}
+Fst::Arc::Arc(int next_state, int ilabel, int olabel, float weight): 
+    next_state(next_state),
+    input_label(ilabel),
+    output_label(olabel),
+    weight(weight) {}
+
+
+Fst::Fst(): start_state_(0) {}
+Fst::~Fst() {}
+
 Fst::ArcIterator::ArcIterator(int base, int total, const Arc *arcs) :
     base_(base),
     cnt_pos_(0),
@@ -35,11 +46,8 @@ Status Fst::Read(util::ReadableFile *fd) {
   status = fd->Read(section_name.data(), 32);
   if (!status.ok()) return status;
   section_name.back() = '\0';
-  if (strcmp(section_name.data(), kSectionName) != 0) {
-    return Status::Corruption(util::Format(
-        "section_name == '{}' expected, but '{}' found",
-        kSectionName,
-        section_name.data()));
+  if (std::string(section_name.data()) != kSectionName) {
+    return Status::Corruption(fd->filename());
   }
   status = fd->ReadValue<int32_t>(&section_size);
   if (!status.ok()) return status;
@@ -107,6 +115,31 @@ int Fst::CountArcs(int state) const {
   }
   int next_idx = next_state >= 0 ? state_idx_[next_state] : arcs_.size();
   return next_idx - state_idx;
+}
+
+bool Fst::GetArc(int state, int ilabel, Arc *arc) const {
+  int num_arcs = CountArcs(state);
+  if (num_arcs == 0) return false;
+
+  int start_idx = state_idx_[state];
+  const Arc *first = &arcs_[start_idx];
+  const Arc *last = &arcs_[start_idx + num_arcs];
+
+
+  const Arc *found_arc = std::lower_bound(
+      first,
+      last,
+      Arc(0, ilabel, 0, 0.0f), 
+      [] (const Fst::Arc &l, const Fst::Arc &r) {
+        return l.input_label < r.input_label;
+      });
+  if (found_arc == last || found_arc->input_label != ilabel) {
+    return false;
+  } else {
+    // We have found this arc
+    *arc = *found_arc;
+    return true;
+  }
 }
 
 Fst::ArcIterator Fst::IterateArcs(int state) const {

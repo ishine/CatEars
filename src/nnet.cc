@@ -121,6 +121,8 @@ void BatchNormLayer::Propagate(
 Status BatchNormLayer::Read(util::ReadableFile *fd) {
   PK_CHECK_STATUS(scale_.Read(fd));
   PK_CHECK_STATUS(offset_.Read(fd));
+
+  return Status::OK();
 }
 
 void SoftmaxLayer::Propagate(
@@ -210,6 +212,8 @@ Status NarrowLayer::Read(util::ReadableFile *fd) {
 
   narrow_right_ = narrow_right;
   narrow_left_ = narrow_left;
+
+  return Status::OK();
 }
 
 

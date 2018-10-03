@@ -319,7 +319,7 @@ Decoder::Hypothesis Decoder::BestPath() {
   for (int i = 0; i < toks_.size(); ++i) {
     Token *tok = toks_[i];
     int state = tok->state();
-    double cost = tok->cost() + fst_->final(state);
+    double cost = tok->cost() + fst_->Final(state);
     if (cost != INFINITY && cost < best_cost) {
       best_cost = cost;
       best_idx = i;
@@ -341,7 +341,7 @@ Decoder::Hypothesis Decoder::BestPath() {
   }
 
   weight = best_cost;
-  weight += fst_->final(best_tok->state());
+  weight += fst_->Final(best_tok->state());
 
   return Hypothesis(words, weight);
 }

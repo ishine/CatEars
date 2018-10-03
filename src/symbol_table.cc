@@ -50,10 +50,18 @@ Status SymbolTable::Read(const std::string &filename) {
   return Status::OK();
 }
 
-const char *SymbolTable::Get(int symbol_id) {
+const char *SymbolTable::Get(int symbol_id) const {
   assert(symbol_id < words_.size() && "symbol_id out of boundary");
   return words_[symbol_id].c_str();
 }
 
+int SymbolTable::GetId(const std::string &word) const {
+  std::unordered_map<std::string, int>::const_iterator it = word_ids_.find(word);
+  if (it == word_ids_.end()) {
+    return kNotExist;
+  } else {
+    return it->second;
+  }
+}
 
 }  // namespace pocketkaldi

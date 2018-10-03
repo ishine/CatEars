@@ -5,11 +5,12 @@ import struct
 SECTION_NAME = b"pk::fst_0"
 
 def print_usage():
-    print('Usage: python3 {} <openfst-binfile> <output-binfile> [text|binary]'.format(sys.argv[0]))
+    print('Usage: python {} <openfst-binfile> <output-binfile> [text|binary]'.format(sys.argv[0]))
 
 if len(sys.argv) not in {3, 4}:
     print_usage()
     quit()
+
 output_binary = True
 if len(sys.argv) == 4:
     if sys.argv[3] == "text":
@@ -41,7 +42,9 @@ for state in f.states():
             arc.olabel,
             float(arc.weight)))
 
-arcs.sort()
+# Sort by ilabel
+arcs.sort(key = lambda x: (x[0], x[2]))
+
 state_arcidx = [-1] * state_number
 last_state = -1
 for idx, arc in enumerate(arcs):

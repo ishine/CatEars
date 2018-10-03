@@ -22,9 +22,9 @@ void TestFst() {
   assert(status.ok());
 
   assert(fst.start_state() == 0);
-  assert(fst.final(0) == std::numeric_limits<double>::infinity());
-  assert(fst.final(1) == std::numeric_limits<double>::infinity());
-  assert(fst.final(2) == 3.5f);
+  assert(fst.Final(0) == std::numeric_limits<double>::infinity());
+  assert(fst.Final(1) == std::numeric_limits<double>::infinity());
+  assert(fst.Final(2) == 3.5f);
 
   
   const Fst::Arc *arc = nullptr;
