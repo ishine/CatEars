@@ -49,6 +49,9 @@ class Decoder {
   static constexpr int kCutoffSamples = 200;
   static constexpr int kCutoffRandSeed = 0x322;
 
+  // State stores the states of each FST for decoding.
+  class State;
+
   // Stores the decoding result
   class Hypothesis;
 
@@ -121,7 +124,7 @@ class Decoder {
 
   // Stores the map between state-id and the index of corresponded token in
   // toks_
-  HashTable<int32_t, int32_t> state_idx_;
+  HashTable<State, int32_t> state_idx_;
 
   // Storea all output-label nodes
   GCPool<OLabel> olabels_pool_;
@@ -129,6 +132,34 @@ class Decoder {
   // Beam threshold
   float beam_;
 };
+
+
+// Stores the state of each FST
+class Decoder::State {
+ public:
+  State(int32_t hclg_state, int32_t lm_state);
+  State();
+
+  int32_t hclg_state() const { return hclg_state_; }
+  int32_t lm_state() const { return lm_state_; }
+
+  bool operator==(const State &s) const {
+    return hclg_state_ == s.hclg_state_ && lm_state_ == s.lm_state_;
+  }
+ 
+ private:
+  int32_t hclg_state_;
+  int32_t lm_state_;
+};
+
+// Hash fucntions for state
+inline int32_t hash(Decoder::State s) {
+  int32_t h = 19;
+  h = h * 31 + s.hclg_state();
+  h = h * 31 + s.lm_state();
+
+  return h;
+}
 
 // Stores the decoding result
 class Decoder::Hypothesis {
@@ -148,10 +179,10 @@ class Decoder::Hypothesis {
 
 class Decoder::Token {
  public:
-  Token(int state, float cost, OLabel *olabel);
+  Token(State state, float cost, OLabel *olabel);
 
   // The state in FST
-  int state() const { return state_; }
+  State state() const { return state_; }
 
   // Current cost
   float cost() const { return cost_; }
@@ -160,9 +191,9 @@ class Decoder::Token {
   OLabel *olabel() const { return olabel_; }
 
  private:
-  int state_;
-  float cost_;
   OLabel *olabel_;
+  State state_;
+  float cost_;
 };
 
 class Decoder::OLabel : public Collectable {

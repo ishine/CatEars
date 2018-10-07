@@ -10,7 +10,13 @@
 
 namespace pocketkaldi {
 
-Decoder::Token::Token(int state, float cost, OLabel *olabel):
+Decoder::State::State(int32_t hclg_state, int32_t lm_state):
+    hclg_state_(hclg_state),
+    lm_state_(lm_state) {}
+
+Decoder::State::State(): hclg_state_(0), lm_state_(0) {}
+
+Decoder::Token::Token(State state, float cost, OLabel *olabel):
     state_(state),
     cost_(cost),
     olabel_(olabel) {
@@ -105,7 +111,7 @@ bool Decoder::InsertTok(
     OLabel *prev_olabel,
     float cost) {
   int next_state = arc->next_state;
-  int tok_idx = state_idx_.Find(next_state, kNotExist);
+  int tok_idx = state_idx_.Find(State(next_state, 0), kNotExist);
   
   // Create the olabel for next tok when the output_label of arc
   // is not 0 (epsilon)
@@ -119,13 +125,13 @@ bool Decoder::InsertTok(
   // Insert new or update existing token in the beam
   if (tok_idx == kNotExist) {
     int num_toks = toks_.size();
-    toks_.push_back(toks_pool_.Alloc(next_state, cost, next_olabel));
-    state_idx_.Insert(next_state, num_toks);
+    toks_.push_back(toks_pool_.Alloc(State(next_state, 0), cost, next_olabel));
+    state_idx_.Insert(State(next_state, 0), num_toks);
   } else {
     // If the cost of existing token is less than the new one, just discard
     // inserting and return false
     if (toks_[tok_idx]->cost() > cost) {
-      toks_[tok_idx] = toks_pool_.Alloc(next_state, cost, next_olabel);
+      toks_[tok_idx] = toks_pool_.Alloc(State(next_state, 0), cost, next_olabel);
     } else {
       return false;
     }
@@ -193,15 +199,15 @@ double Decoder::GetCutoff(float *adaptive_beam, Token **best_tok) {
 
 // Processes nonemitting arcs for one frame.  Propagates within cur_toks_.
 void Decoder::ProcessNonemitting(double cutoff) {
-  std::vector<int> queue;
+  std::vector<State> queue;
   for (const Token *tok : toks_) {
-    assert(tok->state() >= 0);
+    assert(tok->state().hclg_state() >= 0);
     queue.push_back(tok->state());
   }
 
   // Loop until no state in beam have out-going epsilon arc
   while (!queue.empty()) {
-    int state = queue.back();
+    State state = queue.back();
     queue.pop_back();
 
     // Get tok by state
@@ -209,7 +215,7 @@ void Decoder::ProcessNonemitting(double cutoff) {
     int tok_idx = state_idx_.Find(state, kNotExist);
     assert(tok_idx != kNotExist);
 
-    Fst::ArcIterator arc_iter = fst_->IterateArcs(state);
+    Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
     const Fst::Arc *arc = nullptr;
     while ((arc = arc_iter.Next()) != nullptr) {
       // propagate nonemitting only...
@@ -224,7 +230,7 @@ void Decoder::ProcessNonemitting(double cutoff) {
       // If the token successfully inserted or updated in the beam, `inserted`
       // will be true and then we will push the new state into `queue`
       bool inserted = InsertTok(arc, from_tok->olabel(), total_cost);
-      if (inserted) queue.push_back(arc->next_state);
+      if (inserted) queue.push_back(State(arc->next_state, 0));
     }
   }
 }
@@ -253,8 +259,8 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
 
   // First process the best token to get a hopefully
   // reasonably tight bound on the next cutoff.
-  int state = best_tok->state();
-  Fst::ArcIterator arc_iter = fst_->IterateArcs(state);
+  State state = best_tok->state();
+  Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
   const Fst::Arc *arc = nullptr;
   while ((arc = arc_iter.Next()) != nullptr) {
     if (arc->input_label == 0) continue;
@@ -271,13 +277,13 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
   // Ok, we iterate each token in prev_tok_ and add new tokens into toks_ with
   // the emitting arcs of them.
   for (Token *from_tok : prev_toks_) {
-    int state = from_tok->state();
+    State state = from_tok->state();
 
     // weight_cutoff is computed according to beam size
     // So there are only top beam_size toks less than weight_cutoff
     if (from_tok->cost() > weight_cutoff) continue;
 
-    Fst::ArcIterator arc_iter = fst_->IterateArcs(state);
+    Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
     const Fst::Arc *arc = nullptr;
     while ((arc = arc_iter.Next()) != nullptr) {
       if (arc->input_label == 0) continue;
@@ -318,8 +324,8 @@ Decoder::Hypothesis Decoder::BestPath() {
   double best_cost = INFINITY;
   for (int i = 0; i < toks_.size(); ++i) {
     Token *tok = toks_[i];
-    int state = tok->state();
-    double cost = tok->cost() + fst_->Final(state);
+    State state = tok->state();
+    double cost = tok->cost() + fst_->Final(state.hclg_state());
     if (cost != INFINITY && cost < best_cost) {
       best_cost = cost;
       best_idx = i;
@@ -341,7 +347,7 @@ Decoder::Hypothesis Decoder::BestPath() {
   }
 
   weight = best_cost;
-  weight += fst_->Final(best_tok->state());
+  weight += fst_->Final(best_tok->state().hclg_state());
 
   return Hypothesis(words, weight);
 }
