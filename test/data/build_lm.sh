@@ -5,3 +5,5 @@ cat lm.train.txt | sed 's/ /\n/g' | sort | uniq | awk 'BEGIN { print "<eps> 0"; 
 irstlm build-lm -i lm.train.txt -f 2 -o lm.arpa
 gunzip -c lm.arpa.gz | arpa2fst --read-symbol-table=lm.words.txt - G.fst
 python ../../tool/convert_fstfmt.py G.fst G.pfst
+cat lm.arpa.gz | gunzip | python3 ../../tool/prune_lm.py > lm.1order.arpa
+python3 ../../tool/convert_unigram.py lm.1order.arpa lm.words.txt lm.1order.bin
