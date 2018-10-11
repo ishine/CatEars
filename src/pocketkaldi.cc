@@ -18,6 +18,7 @@
 #include "pcm_reader.h"
 #include "configuration.h"
 #include "util.h"
+#include "lm_fst.h"
 
 using pocketkaldi::Decoder;
 using pocketkaldi::Fbank;
@@ -32,6 +33,8 @@ using pocketkaldi::SubVector;
 using pocketkaldi::AcousticModel;
 using pocketkaldi::Decodable;
 using pocketkaldi::SymbolTable;
+using pocketkaldi::LmFst;
+using pocketkaldi::DeltaLmFst;
 
 // The internal version of an utterance. It stores the intermediate state in
 // decoding.
@@ -46,6 +49,9 @@ void pk_init(pk_t *self) {
   self->symbol_table = NULL;
   self->fbank = NULL;
   self->enable_cmvn = 0;
+  self->delta_lm_fst = nullptr;
+  self->large_lm_fst = nullptr;
+  self->original_lm = nullptr;
 }
 
 void pk_destroy(pk_t *self) {
@@ -105,6 +111,40 @@ Status ReadSymbolTable(pk_t *self, const Configuration &conf) {
   return Status::OK();
 }
 
+// Read and initialize delta lm fst
+Status ReadDeltaLmFst(pk_t *self, const Configuration &conf) {
+  std::string large_lm_file = conf.GetPathOrElse("large_lm", "");
+
+  // If delta_lm_fst is not enables
+  if (large_lm_file == "") return Status::OK();
+
+  // Origianl LM in HCLG
+  std::string original_lm_file = conf.GetPathOrElse("original_lm", "");
+  if (original_lm_file == "") {
+    return pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
+        "Unable to find key 'original_lm' in {}",
+        original_lm_file));
+  }
+
+  pocketkaldi::util::ReadableFile fd_original_lm;
+  PK_CHECK_STATUS(fd_original_lm.Open(original_lm_file));
+  self->original_lm = new Vector<float>();
+  PK_CHECK_STATUS(self->original_lm->Read(&fd_original_lm));
+
+  // Large LM
+  pocketkaldi::util::ReadableFile fd_large_lm;
+  PK_CHECK_STATUS(fd_large_lm.Open(large_lm_file));
+  self->large_lm_fst = new LmFst();
+  PK_CHECK_STATUS(self->large_lm_fst->Read(&fd_large_lm));
+
+  // Build DeltaLmFst
+  assert(self->symbol_table != nullptr);
+  self->delta_lm_fst = new DeltaLmFst(self->original_lm,
+                                      self->large_lm_fst,
+                                      self->symbol_table);
+
+  return Status::OK();
+}
 
 // Pocketkaldi model struct
 //   FST
@@ -144,6 +184,10 @@ void pk_load(pk_t *self, const char *filename, pk_status_t *status) {
 
   // SYMBOL TABLE
   status_vn = ReadSymbolTable(self, conf);
+  if (!status_vn.ok()) goto pk_load_failed;
+
+  // DelteLmFst (if available)
+  status_vn = ReadDeltaLmFst(self, conf);
   if (!status_vn.ok()) goto pk_load_failed;
 
   // Initialize fbank feature extractor
@@ -222,7 +266,7 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
 
 
   // Start to decode
-  Decoder decoder(recognizer->fst);
+  Decoder decoder(recognizer->fst, recognizer->delta_lm_fst);
   Decodable decodable(recognizer->am, 0.1, feats);
   t = clock();
   decodable.Compute();

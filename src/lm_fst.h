@@ -39,8 +39,8 @@ class LmFst : public Fst {
 // symbols
 class DeltaLmFst {
  public:
-  DeltaLmFst(const Vector<float> *small_lm_,
-             const LmFst *lm_,
+  DeltaLmFst(const Vector<float> *small_lm,
+             const LmFst *lm,
              const SymbolTable *symbol_table);
 
   // Start state of this Fst. It will transduce the <s> symbol and return the

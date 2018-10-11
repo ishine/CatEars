@@ -40,6 +40,14 @@ namespace pocketkaldi {
 // Decoder is the core class in pocketkaldi. It decodes the Decodable object
 // using viterbi algorithm and stores the best result into Decoder::Hypothesis
 // class
+//
+// This decoder has 2 modes:
+//   - Single HCLG mode
+//   - Online composition of HCLG and G' mode. In which, G' is a large LM.
+//
+// In online composition mode, G' should be a backoff LM. ilabel of backoff arc
+// should be epsilon (aka 0) and symbols of BOS/EOS (<s> and </s>) should be
+// exist.
 class Decoder {
  public:
   static constexpr int kBeamSize = 30000;
@@ -57,7 +65,7 @@ class Decoder {
 
   // Initialize the decoder with the FST graph fst. It just borrows the pointer
   // of fst and not own it.
-  Decoder(const Fst *fst);
+  Decoder(const Fst *fst, const DeltaLmFst *delta_lm_fst = nullptr);
   ~Decoder();
 
   // Decodes the Decodable object, the best path could be obtain by
@@ -91,13 +99,12 @@ class Decoder {
   // Initialize decoding and put the root state into beam
   void InitDecoding();
 
-  // Insert tok into self->toks_. The tok is created according to arc. And it
+  // Insert tok into self->toks_ with next_state and its output_label. And it
   // will either insert a new token or update existing token in the beam.
-  // \param olabel_idx the olabel-index of previous token in viterbi
-  // \param cost the cost of new token
-  // \return true if successfully inserted. Otherwise, when the cost of
+  // return true if successfully inserted. Otherwise, when the cost of
   // existing tok is less than new one, return false
-  bool InsertTok(const Fst::Arc *arc, OLabel *olabel, float cost);
+  bool InsertTok(
+      State next_state, int output_label, OLabel *prev_olabel, float cost);
 
   // Processes nonemitting arcs for one frame. Propagates within cur_toks_.
   void ProcessNonemitting(double cutoff);
@@ -106,11 +113,19 @@ class Decoder {
   // \return cutoff of next weight
   float ProcessEmitting(Decodable *decodable);
 
+  // Propogate the lm_state with ilabel in DeltaLmFst. Return the next state
+  // in DeltaLmFst and set weight to the cost of transition.
+  int32_t PropogateLm(int32_t lm_state, int ilabel, float *weight);
+
   // Only used in get_cutoff()
   std::vector<float> costs_;
 
   // FST graph used for decoding
   const Fst *fst_;
+
+  // Additional graph F = G^{-1} o G', where G^{-1} is the same as G in HCLG
+  // graph except that all the weights are negative. G' is a big language model
+  const DeltaLmFst *delta_lm_fst_;
 
   // Frames decoded
   int num_frames_decoded_;
@@ -159,6 +174,10 @@ inline int32_t hash(Decoder::State s) {
   h = h * 31 + s.lm_state();
 
   return h;
+}
+
+inline std::string ToString(const Decoder::State &state) {
+  return util::Format("State({}, {})", state.hclg_state(), state.lm_state());
 }
 
 // Stores the decoding result

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "hashtable.h"
+#include "lm_fst.h"
 
 namespace pocketkaldi {
 
@@ -31,9 +32,9 @@ Decoder::Hypothesis::Hypothesis(const std::vector<int> &words, float weight):
     words_(words),
     weight_(weight) {
 }
-
-Decoder::Decoder(const Fst *fst):
+Decoder::Decoder(const Fst *fst, const DeltaLmFst *delta_lm_fst):
     fst_(fst),
+    delta_lm_fst_(delta_lm_fst),
     beam_(16.0),
     state_idx_(kBeamSize * 4) {
 }
@@ -94,30 +95,50 @@ void Decoder::InitDecoding() {
   // Initialize decoding:
   int start_state = fst_->start_state();
   assert(start_state >= 0);
-  
-  Fst::Arc dummy_arc;
-  dummy_arc.input_label = 0;
-  dummy_arc.output_label = 0;
-  dummy_arc.next_state = start_state;
-  dummy_arc.weight = 0;
 
-  InsertTok(&dummy_arc, nullptr, 0.0f);
+  int lm_start_state = 0;
+  if (delta_lm_fst_) {
+    lm_start_state = delta_lm_fst_->StartState();
+  }
+
+  InsertTok(State(start_state, lm_start_state), 0, nullptr, 0.0f);
   num_frames_decoded_ = 0;
   ProcessNonemitting(INFINITY);
 }
 
+int32_t Decoder::PropogateLm(int32_t lm_state, int ilabel, float *weight) {
+  assert(delta_lm_fst_ != nullptr);
+  Fst::Arc delta_lm_arc;
+
+  if (ilabel != 0) {
+    bool success = delta_lm_fst_->GetArc(lm_state,
+                                         ilabel,
+                                         &delta_lm_arc);
+    if (success) {
+      *weight = delta_lm_arc.weight;
+      return delta_lm_arc.next_state;
+    } else {
+      PK_WARN("decoder: HCLG output and LM input symbol mismatch");
+    }
+  }
+
+  *weight = 0.0f;
+  return lm_state;
+}
+
 bool Decoder::InsertTok(
-    const Fst::Arc *arc,
+    State next_state,
+    int output_label,
     OLabel *prev_olabel,
     float cost) {
-  int next_state = arc->next_state;
-  int tok_idx = state_idx_.Find(State(next_state, 0), kNotExist);
+  // PK_DEBUG(util::Format("insert state = {}", next_state));
+  int tok_idx = state_idx_.Find(next_state, kNotExist);
   
   // Create the olabel for next tok when the output_label of arc
   // is not 0 (epsilon)
   OLabel *next_olabel = nullptr;
-  if (arc->output_label != 0) {
-    next_olabel = olabels_pool_.Alloc(prev_olabel, arc->output_label);
+  if (output_label != 0) {
+    next_olabel = olabels_pool_.Alloc(prev_olabel, output_label);
   } else {
     next_olabel = prev_olabel;
   }
@@ -125,13 +146,13 @@ bool Decoder::InsertTok(
   // Insert new or update existing token in the beam
   if (tok_idx == kNotExist) {
     int num_toks = toks_.size();
-    toks_.push_back(toks_pool_.Alloc(State(next_state, 0), cost, next_olabel));
-    state_idx_.Insert(State(next_state, 0), num_toks);
+    toks_.push_back(toks_pool_.Alloc(next_state, cost, next_olabel));
+    state_idx_.Insert(next_state, num_toks);
   } else {
     // If the cost of existing token is less than the new one, just discard
     // inserting and return false
     if (toks_[tok_idx]->cost() > cost) {
-      toks_[tok_idx] = toks_pool_.Alloc(State(next_state, 0), cost, next_olabel);
+      toks_[tok_idx] = toks_pool_.Alloc(next_state, cost, next_olabel);
     } else {
       return false;
     }
@@ -199,9 +220,11 @@ double Decoder::GetCutoff(float *adaptive_beam, Token **best_tok) {
 
 // Processes nonemitting arcs for one frame.  Propagates within cur_toks_.
 void Decoder::ProcessNonemitting(double cutoff) {
+  PK_DEBUG("ProcessNonemitting()");
   std::vector<State> queue;
   for (const Token *tok : toks_) {
     assert(tok->state().hclg_state() >= 0);
+    // PK_DEBUG(util::Format("queue->push_back({})", tok->state()));
     queue.push_back(tok->state());
   }
 
@@ -224,19 +247,34 @@ void Decoder::ProcessNonemitting(double cutoff) {
       const float ac_cost = 0.0;
       const Token *from_tok = toks_[tok_idx];
       double total_cost = from_tok->cost() + arc->weight + ac_cost;
+
+      // Online compose with G' when available
+      State state = from_tok->state();
+      int32_t lm_state = state.lm_state();
+      if (delta_lm_fst_) {
+        float lm_weight = 0.0f;
+        lm_state = PropogateLm(lm_state, arc->output_label, &lm_weight);
+        total_cost += lm_weight;
+      }
+
       if (total_cost > cutoff) continue;
 
       // Create and insert tok into beam
       // If the token successfully inserted or updated in the beam, `inserted`
       // will be true and then we will push the new state into `queue`
-      bool inserted = InsertTok(arc, from_tok->olabel(), total_cost);
-      if (inserted) queue.push_back(State(arc->next_state, 0));
+      bool inserted = InsertTok(
+          State(arc->next_state, lm_state),
+          arc->output_label,
+          from_tok->olabel(),
+          total_cost);
+      if (inserted) queue.push_back(State(arc->next_state, lm_state));
     }
   }
 }
 
 // Process the emitting (non-epsilon) arcs of each states in the beam
 float Decoder::ProcessEmitting(Decodable *decodable) {
+  PK_DEBUG("ProcessEmitting()");
   // Clear the prev_toks_
   state_idx_.Clear();
 
@@ -259,8 +297,9 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
 
   // First process the best token to get a hopefully
   // reasonably tight bound on the next cutoff.
-  State state = best_tok->state();
-  Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
+  State best_state = best_tok->state();
+  PK_DEBUG(util::Format("best_state = {}", best_state));
+  Fst::ArcIterator arc_iter = fst_->IterateArcs(best_state.hclg_state());
   const Fst::Arc *arc = nullptr;
   while ((arc = arc_iter.Next()) != nullptr) {
     if (arc->input_label == 0) continue;
@@ -269,6 +308,14 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
         num_frames_decoded_,
         arc->input_label);
     double total_cost = best_tok->cost() + arc->weight + acoustic_cost;
+
+    // Online compose with G' when available
+    if (delta_lm_fst_) {
+      float lm_weight = 0.0f;
+      PropogateLm(best_state.lm_state(), arc->output_label, &lm_weight);
+      total_cost += lm_weight;
+    }
+
     if (total_cost + adaptive_beam < next_weight_cutoff) {
       next_weight_cutoff = total_cost + adaptive_beam;
     }
@@ -292,6 +339,14 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
           num_frames_decoded_,
           arc->input_label);
       double total_cost = from_tok->cost() + arc->weight + ac_cost;
+
+      // Online compose with G' when available
+      int32_t lm_state = state.lm_state();
+      if (delta_lm_fst_) {
+        float lm_weight = 0.0f;
+        lm_state = PropogateLm(state.lm_state(), arc->output_label, &lm_weight);
+        total_cost += lm_weight;
+      }
       
       // Prune the toks whose cost is too high
       if (total_cost > next_weight_cutoff) continue;
@@ -300,8 +355,12 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
       }
 
       // Create and insert the tok into toks_
-      assert(arc->next_state >= 0);
-      InsertTok(arc, from_tok->olabel(), total_cost);
+      assert(arc->next_state >= 0 && lm_state >= 0);
+      InsertTok(
+          State(arc->next_state, lm_state),
+          arc->output_label,
+          from_tok->olabel(),
+          total_cost);
     }
 
     toks_pool_.Dealloc(from_tok);
@@ -326,11 +385,18 @@ Decoder::Hypothesis Decoder::BestPath() {
     Token *tok = toks_[i];
     State state = tok->state();
     double cost = tok->cost() + fst_->Final(state.hclg_state());
+
+    if (delta_lm_fst_) {
+      float lm_weight = delta_lm_fst_->Final(tok->state().lm_state());
+      cost += lm_weight;
+    }
+
     if (cost != INFINITY && cost < best_cost) {
       best_cost = cost;
       best_idx = i;
     }
   }
+
   if (best_idx == kNotExist) return Hypothesis(std::vector<int>(), 0.0f);
 
   // Get all output labels from best_tok

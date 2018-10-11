@@ -21,6 +21,8 @@ class AcousticModel;
 class Fbank;
 template <class T> class Vector;
 class SymbolTable;
+class LmFst;
+class DeltaLmFst;
 }  // namespace pocketkaldi
 
 typedef struct pk_status_t {
@@ -31,6 +33,9 @@ typedef struct pk_status_t {
 
 typedef struct pk_t {
   pocketkaldi::Fst *fst;
+  pocketkaldi::LmFst *large_lm_fst;
+  pocketkaldi::DeltaLmFst *delta_lm_fst;
+  pocketkaldi::Vector<float> *original_lm;
   pocketkaldi::AcousticModel *am;
   pocketkaldi::Fbank *fbank;
   pocketkaldi::Vector<float> *cmvn_global_stats;
