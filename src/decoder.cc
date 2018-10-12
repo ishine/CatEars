@@ -28,6 +28,20 @@ Decoder::OLabel::OLabel(OLabel *previous, int olabel):
     olabel_(olabel) {
 }
 
+void Decoder::OLabel::OnCollect() {
+  nexts_.clear();
+
+  // Remove itself from previous_->nexts_ if previous_ is not freed
+  if (previous_) {
+    if (!previous_->is_freed()) {
+      previous_->nexts_.erase(olabel_);
+    }
+    previous_ = nullptr;
+  }
+
+  olabel_ = -1;
+}
+
 Decoder::Hypothesis::Hypothesis(const std::vector<int> &words, float weight):
     words_(words),
     weight_(weight) {
@@ -138,7 +152,11 @@ bool Decoder::InsertTok(
   // is not 0 (epsilon)
   OLabel *next_olabel = nullptr;
   if (output_label != 0) {
-    next_olabel = olabels_pool_.Alloc(prev_olabel, output_label);
+    if (prev_olabel) next_olabel = prev_olabel->next(output_label);
+    if (!next_olabel) {
+      next_olabel = olabels_pool_.Alloc(prev_olabel, output_label);
+      if (prev_olabel) prev_olabel->set_next(output_label, next_olabel);
+    }
   } else {
     next_olabel = prev_olabel;
   }

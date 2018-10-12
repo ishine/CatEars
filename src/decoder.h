@@ -219,17 +219,36 @@ class Decoder::OLabel : public Collectable {
  public:
   OLabel(OLabel *previous, int olabel);
 
+  // Called when LmToken is garbage collected
+  void OnCollect() override;
+
   // Index of previous olabel
   OLabel *previous() const { return previous_; }
 
   // Output label of current node
   int olabel() const { return olabel_; }
 
+  // Next state with input label. Return nullptr when next state with ilabel
+  // not exist 
+  OLabel *next(int ilabel) const {
+    std::unordered_map<int, OLabel *>::const_iterator it = nexts_.find(ilabel);
+    if (it != nexts_.end()) {
+      return it->second;
+    } else {
+      return nullptr;
+    }
+  }
+  void set_next(int ilabel, OLabel *next) {
+    nexts_[ilabel] = next;
+  }
+
  private:
   OLabel *previous_;
   int olabel_;
+  std::unordered_map<int, OLabel *> nexts_;
 };
 
 }  // namespace pocketkaldi
+
 
 #endif  // POCKETKALDI_DECODER_H_

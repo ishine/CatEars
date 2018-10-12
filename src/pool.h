@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <vector>
+#include <unordered_set>
 #include <memory>
 #include <type_traits>
 #include "util.h"
@@ -66,18 +67,29 @@ class Pool {
   // Clear all allocated class T
   void Clear() {
     // Call the dtor
+
+    // Element in free_ is already destructed
+    std::unordered_set<T *> freed;
+    for (T *elem : free_) {
+      freed.insert(elem);
+    }
+
     if (!std::is_trivially_destructible<T>::value) {
       for (int block_idx = 0; block_idx < blocks_.size() - 1; ++block_idx) {
         T *block = blocks_[block_idx];
         for (int idx = 0; idx < BLOCK_SIZE; ++idx) {
-          block[idx].~T();
+          if (freed.find(block + idx) == freed.end()) {
+            block[idx].~T();
+          }
         }
       }
 
       // The last block
       T *last_block = blocks_.back();
       for (int idx = 0; idx < current_pos_; ++idx) {
-        last_block[idx].~T();
+        if (freed.find(last_block + idx) == freed.end()) {
+          last_block[idx].~T();
+        }
       }
     }
 
@@ -131,6 +143,9 @@ class Collectable {
   bool is_marked() const { return state_ == kMarked; }
   bool is_freed() const { return state_ == kFreed; }
 
+  // This function will be called when object is going to be collected
+  virtual void OnCollect() {}
+
  private:
   int8_t state_;
 };
@@ -156,7 +171,6 @@ class GCPool : public Pool<T, BLOCK_SIZE> {
   }
 
   void Dealloc(T *pointer) {
-    pointer->Free();
     Pool<T, BLOCK_SIZE>::Dealloc(pointer);
   }
 
@@ -197,7 +211,8 @@ class GCPool : public Pool<T, BLOCK_SIZE> {
       }
     }
 
-    // Free all unmarked nodes
+    // Dispose all unmarked nodes
+    std::vector<T *> nodes_to_free;
     int free_count = 0;
     for (int block = 0; block <= this->current_block_; ++block) {
       int max_pos = block == this->current_block_ ?
@@ -208,10 +223,23 @@ class GCPool : public Pool<T, BLOCK_SIZE> {
         T *node = this->blocks_[block] + pos;
         if (node->is_freed()) continue;
         if (node->is_marked()) continue;
-        Dealloc(node);
+
+        // Call OnCollect to release resources in nodes
+        node->OnCollect();
+
+        // Change state to free. We mark it free here beacuse it would be used
+        // in OnCollect function of other nodes
+        node->Free();
+
+        nodes_to_free.push_back(node);
         ++free_count;
       }
     }
+
+    for (T *node : nodes_to_free) {
+      Dealloc(node);
+    }
+
     PK_DEBUG(util::Format(
         "Freed {} nodes, Allocated = {}",
         free_count,
