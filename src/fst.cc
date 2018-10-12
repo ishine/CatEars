@@ -6,15 +6,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>
 #include <array>
 #include <algorithm>
+#include "symbol_table.h"
 
 namespace pocketkaldi {
 
 const char *Fst::kSectionName = "pk::fst_0";
 
-Fst::Arc::Arc() {}
-Fst::Arc::Arc(int next_state, int ilabel, int olabel, float weight): 
+FstArc::FstArc() {}
+FstArc::FstArc(int next_state, int ilabel, int olabel, float weight): 
     next_state(next_state),
     input_label(ilabel),
     output_label(olabel),
@@ -24,7 +26,7 @@ Fst::Arc::Arc(int next_state, int ilabel, int olabel, float weight):
 Fst::Fst(): start_state_(0) {}
 Fst::~Fst() {}
 
-Fst::ArcIterator::ArcIterator(int base, int total, const Arc *arcs) :
+Fst::ArcIterator::ArcIterator(int base, int total, const FstArc *arcs) :
     base_(base),
     cnt_pos_(0),
     total_(total),
@@ -35,6 +37,15 @@ Fst::ArcIterator::~ArcIterator() {
   base_ = 0;
   cnt_pos_ = 0;
   total_ = 0;
+}
+
+int Fst::StartState() const {
+  return start_state_;
+}
+
+float Fst::Final(int state_id) const {
+  assert(state_id < final_.size());
+  return final_[state_id];
 }
 
 Status Fst::Read(util::ReadableFile *fd) {
@@ -70,7 +81,7 @@ Status Fst::Read(util::ReadableFile *fd) {
       sizeof(arc_number) +
       sizeof(start_state) +
       state_number * (sizeof(final_.front()) + sizeof(state_idx_.front())) +
-      arc_number * sizeof(Arc);
+      arc_number * sizeof(FstArc);
   if (expected_section_size != section_size) {
     return Status::Corruption(util::Format(
         "section_size == {} expected, but {} found",
@@ -117,20 +128,20 @@ int Fst::CountArcs(int state) const {
   return next_idx - state_idx;
 }
 
-bool Fst::GetArc(int state, int ilabel, Arc *arc) const {
+bool Fst::GetArc(int state, int ilabel, FstArc *arc) const {
   int num_arcs = CountArcs(state);
   if (num_arcs == 0) return false;
 
   int start_idx = state_idx_[state];
-  const Arc *first = &arcs_[start_idx];
-  const Arc *last = &arcs_[start_idx + num_arcs];
+  const FstArc *first = &arcs_[start_idx];
+  const FstArc *last = &arcs_[start_idx + num_arcs];
 
 
-  const Arc *found_arc = std::lower_bound(
+  const FstArc *found_arc = std::lower_bound(
       first,
       last,
-      Arc(0, ilabel, 0, 0.0f), 
-      [] (const Fst::Arc &l, const Fst::Arc &r) {
+      FstArc(0, ilabel, 0, 0.0f), 
+      [] (const FstArc &l, const FstArc &r) {
         return l.input_label < r.input_label;
       });
   if (found_arc == last || found_arc->input_label != ilabel) {
@@ -151,14 +162,101 @@ Fst::ArcIterator Fst::IterateArcs(int state) const {
     arcs_.data());
 }
 
-const Fst::Arc *Fst::ArcIterator::Next() {
+const FstArc *Fst::ArcIterator::Next() {
   if (cnt_pos_ < total_) {
-    const Arc *arc = &arcs_[base_ + cnt_pos_];
+    const FstArc *arc = &arcs_[base_ + cnt_pos_];
     ++cnt_pos_;
     return arc;
   } else {
     return nullptr;
   }
 }
+
+
+const FstArc *LmFst::GetBackoffArc(int state) const {
+  int num_arcs = CountArcs(state);
+  if (num_arcs == 0) return nullptr;
+
+  int start_idx = state_idx_[state];
+  const FstArc *first = &arcs_[start_idx];
+
+  if (first->input_label != 0) return nullptr;
+  return first;
+}
+
+bool LmFst::GetArc(int state, int ilabel, FstArc *arc) const {
+  assert(ilabel != 0 && "invalid ilabel");
+
+  if (Fst::GetArc(state, ilabel, arc)) {
+    return true;
+  } else {
+    const FstArc *backoff_arc = GetBackoffArc(state);
+    if (backoff_arc) {
+      if (!GetArc(backoff_arc->next_state, ilabel, arc)) return false;
+      arc->weight += backoff_arc->weight;
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
+float LmFst::Final(int state_id) const {
+  float final = Fst::Final(state_id);
+  if (std::isfinite(final)) {
+    return final;
+  } else {
+    // Follow the backoff arc
+    const FstArc *backoff_arc = GetBackoffArc(state_id);
+    if (backoff_arc) {
+      float final_w = Final(backoff_arc->next_state);
+      if (!std::isfinite(final_w)) return INFINITY;
+
+      return final_w + backoff_arc->weight;
+    } else {
+      return INFINITY;
+    }
+  }
+}
+
+DeltaLmFst::DeltaLmFst(
+    const Vector<float> *small_lm,
+    const LmFst *lm,
+    const SymbolTable *symbol_table):
+        small_lm_(small_lm),
+        lm_(lm) {
+  bos_symbol_ = symbol_table->bos_id();
+  eos_symbol_ = symbol_table->eos_id();
+}
+
+int DeltaLmFst::StartState() const {
+  int start_state = lm_->StartState();
+  FstArc arc;
+  if (lm_->GetArc(start_state, bos_symbol_, &arc)) {
+    return arc.next_state;
+  } else {
+    PK_WARN("lm_ didn't have symbol <s> as input");
+    return start_state;
+  }
+}
+
+bool DeltaLmFst::GetArc(int state, int ilabel, FstArc *arc) const {
+  if (lm_->GetArc(state, ilabel, arc)) {
+    arc->weight -= (*small_lm_)(ilabel);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+float DeltaLmFst::Final(int state_id) const {
+  FstArc arc;
+  if (lm_->GetArc(state_id, eos_symbol_, &arc)) {
+    return lm_->Final(arc.next_state) + arc.weight - (*small_lm_)(eos_symbol_);
+  } else {
+    return INFINITY;
+  }
+}
+
 
 }  // namespace pocketkaldi

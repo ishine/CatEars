@@ -171,6 +171,7 @@ class GCPool : public Pool<T, BLOCK_SIZE> {
   }
 
   void Dealloc(T *pointer) {
+    pointer->Free();
     Pool<T, BLOCK_SIZE>::Dealloc(pointer);
   }
 

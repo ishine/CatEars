@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "hashtable.h"
-#include "lm_fst.h"
+#include "fst.h"
 
 namespace pocketkaldi {
 
@@ -107,7 +107,7 @@ void Decoder::InitDecoding() {
   prev_toks_.clear();
 
   // Initialize decoding:
-  int start_state = fst_->start_state();
+  int start_state = fst_->StartState();
   assert(start_state >= 0);
 
   int lm_start_state = 0;
@@ -122,7 +122,7 @@ void Decoder::InitDecoding() {
 
 int32_t Decoder::PropogateLm(int32_t lm_state, int ilabel, float *weight) {
   assert(delta_lm_fst_ != nullptr);
-  Fst::Arc delta_lm_arc;
+  FstArc delta_lm_arc;
 
   if (ilabel != 0) {
     bool success = delta_lm_fst_->GetArc(lm_state,
@@ -257,7 +257,7 @@ void Decoder::ProcessNonemitting(double cutoff) {
     assert(tok_idx != kNotExist);
 
     Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
-    const Fst::Arc *arc = nullptr;
+    const FstArc *arc = nullptr;
     while ((arc = arc_iter.Next()) != nullptr) {
       // propagate nonemitting only...
       if (arc->input_label != 0) continue;
@@ -318,7 +318,7 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
   State best_state = best_tok->state();
   PK_DEBUG(util::Format("best_state = {}", best_state));
   Fst::ArcIterator arc_iter = fst_->IterateArcs(best_state.hclg_state());
-  const Fst::Arc *arc = nullptr;
+  const FstArc *arc = nullptr;
   while ((arc = arc_iter.Next()) != nullptr) {
     if (arc->input_label == 0) continue;
 
@@ -349,7 +349,7 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
     if (from_tok->cost() > weight_cutoff) continue;
 
     Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
-    const Fst::Arc *arc = nullptr;
+    const FstArc *arc = nullptr;
     while ((arc = arc_iter.Next()) != nullptr) {
       if (arc->input_label == 0) continue;
 

@@ -18,7 +18,6 @@
 #include "pcm_reader.h"
 #include "configuration.h"
 #include "util.h"
-#include "lm_fst.h"
 
 using pocketkaldi::Decoder;
 using pocketkaldi::Fbank;

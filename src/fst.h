@@ -8,37 +8,51 @@
 #include "util.h"
 #include "status.h"
 #include "pocketkaldi.h"
+#include "vector.h"
 
 namespace pocketkaldi {
 
-class Fst {
+struct FstArc {
+  int32_t next_state;
+  int32_t input_label;
+  int32_t output_label;
+  float weight;
+
+  FstArc();
+  FstArc(int next_state, int ilabel, int olabel, float weight);
+};
+
+// Interface for Fst
+class IFst {
+ public:
+  // Get the start state of this Fst
+  virtual int StartState() const = 0;
+
+  // Get out-going arc of state with ilabel. On success return true. If arc with
+  // specific ilabel not exist, return false 
+  virtual bool GetArc(int state, int ilabel, FstArc *arc) const = 0;
+
+  // Get the final score of state. If the state is non-terminal, returns 0
+  virtual float Final(int state_id) const = 0;
+};
+
+class Fst : public IFst {
 public:
-  // An out-going arc in Fst
-  struct Arc {
-    int32_t next_state;
-    int32_t input_label;
-    int32_t output_label;
-    float weight;
-
-    Arc();
-    Arc(int next_state, int ilabel, int olabel, float weight);
-  };
-
   // Iterators of out-going arcs for a state
   class ArcIterator {
    public:
-    ArcIterator(int base, int total, const Arc *arcs);
+    ArcIterator(int base, int total, const FstArc *arcs);
     ~ArcIterator();
 
     // If next arc exists, retrun it and move the iterator forward, else return
     // nullptr
-    const Arc *Next();
+    const FstArc *Next();
 
    private:
     int base_;
     int cnt_pos_;
     int total_;
-    const Arc *arcs_;
+    const FstArc *arcs_;
   };
 
   // Consts
@@ -52,20 +66,14 @@ public:
   Status Read(util::ReadableFile *fd);
 
   // Start state of this Fst
-  int start_state() const {
-    return start_state_;
-  }
+  int StartState() const override;
 
   // Get out-going arc of state with ilabel. On success return true. If arc with
   // specific ilabel not exist, return false 
-  virtual bool GetArc(int state, int ilabel, Arc *arc) const;
+  bool GetArc(int state, int ilabel, FstArc *arc) const override;
 
   // Get the final score of state. If the state is non-terminal, returns 0
-  virtual float Final(int state_id) const {
-    assert(state_id < final_.size());
-    return final_[state_id];
-  }
-
+  float Final(int state_id) const override;
 
   // Iterate out-going arcs for a state
   ArcIterator IterateArcs(int state) const;
@@ -79,9 +87,64 @@ public:
 
   int start_state_;
   std::string fst_type_;
-  std::vector<Arc> arcs_;
+  std::vector<FstArc> arcs_;
   std::vector<int32_t> state_idx_;
   std::vector<float> final_;
+};
+
+// Fst for language model, including deterministic on demand for back-off arcs,
+class LmFst : public Fst {
+ public:
+  static constexpr char kLmFst[] = "pk::fst_lm";
+
+  // Get out-going arc of state with ilabel. For LM, we will follow the back-off
+  // arc automatically when there is no arc of ilabel in current state
+  // If no matched arc even follow the back-off arc, return false. 
+  bool GetArc(int state, int ilabel, FstArc *arc) const override;
+
+  // Get the final score of state. If current state is not a final state. It
+  // will flollow the back-off arc automatically
+  float Final(int state_id) const override;
+
+ private:
+  // Get the backoff arc for given state. If there is no back-off arc return
+  // nullptr
+  const FstArc *GetBackoffArc(int state) const;
+};
+
+// DeltaLmFst is the composition of G^{-1} and G'. Where G^{-1} has the negative
+// weights of G in HCLG fst. And G' is a big LM.
+// Here we assuming that G is just a unigram language model, so we don't need to
+// store G^{-1} as a FST, we just store the weight of each word into a vector.
+//
+// Here we also assuming lm_ is a backoff lm fst with BOS and EOS symbols. And
+// DeltaLmFst will transduce <s> and </s> symbol automatically when calling
+// StartState() and Final(). To make it looks like a LM fst without EOS/BOS
+// symbols
+class DeltaLmFst : public IFst {
+ public:
+  DeltaLmFst(const Vector<float> *small_lm,
+             const LmFst *lm,
+             const SymbolTable *symbol_table);
+
+  // Start state of this Fst. It will transduce the <s> symbol and return the
+  // state as start state.
+  // Here we assuming weight of arc from start_state with input symbol <s> is
+  // zero  
+  int StartState() const override;
+
+  // Find the arc in small_lm_ and minus the weight from small_lm_
+  bool GetArc(int state, int ilabel, FstArc *arc) const override;
+
+  // Get the final score from lm_ then minus the </s> weight in small_lm_. 
+  float Final(int state_id) const override;
+
+ private:
+  const Vector<float> *small_lm_;
+  const LmFst *lm_;
+
+  int bos_symbol_;
+  int eos_symbol_;
 };
 
 }  // namespace pocketkaldi

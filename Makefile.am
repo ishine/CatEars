@@ -26,7 +26,6 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/pocketkaldi.cc \
                            src/hashtable.cc \
                            src/configuration.cc \
-                           src/lm_fst.cc \
                            src/gemm.cc
                            
 
@@ -67,8 +66,7 @@ TESTS = fst_test \
         hashtable_test \
         configuration_test \
         pool_test \
-        gemm_test \
-        lm_fst_test
+        gemm_test
 
 check_PROGRAMS = fst_test \
                  srfft_test \
@@ -79,8 +77,7 @@ check_PROGRAMS = fst_test \
                  hashtable_test \
                  configuration_test \
                  pool_test \
-                 gemm_test \
-                 lm_fst_test
+                 gemm_test 
 
 configuration_test_SOURCES = test/configuration_test.cc
 configuration_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
@@ -121,10 +118,6 @@ nnet_test_LDADD = libpocketkaldi.a
 pool_test_SOURCES = test/pool_test.cc
 pool_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
 pool_test_LDADD = libpocketkaldi.a
-
-lm_fst_test_SOURCES = test/lm_fst_test.cc
-lm_fst_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-lm_fst_test_LDADD = libpocketkaldi.a
 
 if ENABLE_TOOLS
     TESTS_ENVIRONMENT = export testdir=$(top_srcdir)/test && export kaldiroot=$(KALDI_ROOT) &&
