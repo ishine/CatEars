@@ -48,9 +48,12 @@ Decoder::Hypothesis::Hypothesis(const std::vector<int> &words, float weight):
 }
 Decoder::Decoder(const Fst *fst, const DeltaLmFst *delta_lm_fst):
     fst_(fst),
-    delta_lm_fst_(delta_lm_fst),
     beam_(16.0),
     state_idx_(kBeamSize * 4) {
+  if (delta_lm_fst) {
+    delta_lm_fst_ = std::unique_ptr<CachedFst>(
+        new CachedFst(delta_lm_fst, 1000000));
+  }
 }
 
 Decoder::~Decoder() {

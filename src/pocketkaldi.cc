@@ -135,7 +135,8 @@ Status ReadDeltaLmFst(pk_t *self, const Configuration &conf) {
   PK_CHECK_STATUS(fd_large_lm.Open(large_lm_file));
   self->large_lm_fst = new LmFst();
   PK_CHECK_STATUS(self->large_lm_fst->Read(&fd_large_lm));
-
+  self->large_lm_fst->InitBucket0();
+  
   // Build DeltaLmFst
   assert(self->symbol_table != nullptr);
   self->delta_lm_fst = new DeltaLmFst(self->original_lm,

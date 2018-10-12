@@ -27,7 +27,7 @@
 #include <math.h>
 #include <vector>
 #include <unordered_map>
-#include <unordered_map>
+#include <memory>
 #include "decodable.h"
 #include "hashtable.h"
 #include "vector.h"
@@ -125,7 +125,7 @@ class Decoder {
 
   // Additional graph F = G^{-1} o G', where G^{-1} is the same as G in HCLG
   // graph except that all the weights are negative. G' is a big language model
-  const DeltaLmFst *delta_lm_fst_;
+  std::unique_ptr<CachedFst> delta_lm_fst_;
 
   // Frames decoded
   int num_frames_decoded_;

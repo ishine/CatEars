@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <utility>
 #include "util.h"
 #include "status.h"
 #include "pocketkaldi.h"
@@ -106,10 +107,15 @@ class LmFst : public Fst {
   // will flollow the back-off arc automatically
   float Final(int state_id) const override;
 
+  // Initialize bucket for state 0 optimization
+  void InitBucket0();
+
  private:
   // Get the backoff arc for given state. If there is no back-off arc return
   // nullptr
   const FstArc *GetBackoffArc(int state) const;
+
+  std::vector<FstArc> bucket_0_;
 };
 
 // DeltaLmFst is the composition of G^{-1} and G'. Where G^{-1} has the negative
@@ -145,6 +151,35 @@ class DeltaLmFst : public IFst {
 
   int bos_symbol_;
   int eos_symbol_;
+};
+
+
+// Provice cache for GetArc method
+class CachedFst {
+ public:
+  explicit CachedFst(const IFst *fst, int bucket_size);
+
+  // Implement interface IFst
+  int StartState() const;
+
+  // Implement interface IFst
+  bool GetArc(int state, int ilabel, FstArc *arc);
+
+  // Implement interface IFst 
+  float Final(int state_id) const;
+
+ private:
+  std::vector<std::pair<int, FstArc>> buckets_;
+  const IFst *fst_;
+
+  // Compute hash value for state and ilabel
+  inline int32_t Hash(int state, int ilabel) const {
+    int32_t h = 19;
+    h = h * 31 + state;
+    h = h * 31 + ilabel;
+
+    return h;
+  }
 };
 
 }  // namespace pocketkaldi

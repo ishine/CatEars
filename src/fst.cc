@@ -172,6 +172,29 @@ const FstArc *Fst::ArcIterator::Next() {
   }
 }
 
+void LmFst::InitBucket0() {
+  // Optimize for special state 0
+  ArcIterator arc_iter = IterateArcs(0);
+  const FstArc *arc = nullptr;
+  int max_ilabel = 0;
+  while ((arc = arc_iter.Next()) != nullptr) {
+    if (arc->input_label > max_ilabel) {
+      max_ilabel = arc->input_label;
+    }
+  }
+
+  // Initalize bucket_0_
+  bucket_0_.resize(max_ilabel + 1);
+  for (FstArc &arc : bucket_0_) {
+    arc.input_label = -1;
+  }
+
+  // Fill bucket_0_
+  arc_iter = IterateArcs(0);
+  while ((arc = arc_iter.Next()) != nullptr) {
+    bucket_0_[arc->input_label] = *arc;
+  }
+}
 
 const FstArc *LmFst::GetBackoffArc(int state) const {
   int num_arcs = CountArcs(state);
@@ -186,6 +209,14 @@ const FstArc *LmFst::GetBackoffArc(int state) const {
 
 bool LmFst::GetArc(int state, int ilabel, FstArc *arc) const {
   assert(ilabel != 0 && "invalid ilabel");
+
+  // We have special optimize for state 0
+  if (state == 0 && ilabel < bucket_0_.size()) {
+    if (bucket_0_[ilabel].input_label == ilabel) {
+      *arc = bucket_0_[ilabel];
+      return true;
+    }
+  }
 
   if (Fst::GetArc(state, ilabel, arc)) {
     return true;
@@ -258,5 +289,41 @@ float DeltaLmFst::Final(int state_id) const {
   }
 }
 
+CachedFst::CachedFst(const IFst *fst, int bucket_size) : fst_(fst) {
+  buckets_.resize(bucket_size);
+  for (std::pair<int, FstArc> &item : buckets_) {
+    item.first = -1;
+  }
+}
+
+int CachedFst::StartState() const {
+  return fst_->StartState();
+}
+
+float CachedFst::Final(int state) const {
+  return fst_->Final(state);
+}
+
+bool CachedFst::GetArc(int state, int ilabel, FstArc *arc) {
+  // Do nothing when state is 0, we have special optimize for it
+  if (state == 0) {
+    return fst_->GetArc(state, ilabel, arc);
+  }
+
+  int idx = Hash(state, ilabel) % buckets_.size();
+  std::pair<int, FstArc> &item = buckets_[idx];
+  if (item.first == state && item.second.input_label == ilabel) {
+    *arc = item.second;
+    return true;
+  }
+
+  bool success = fst_->GetArc(state, ilabel, arc);
+  if (success) {
+    item.first = state;
+    item.second = *arc;
+  }
+
+  return success;
+}
 
 }  // namespace pocketkaldi
