@@ -31,6 +31,13 @@ typedef struct pk_status_t {
   char message[PK_STATUS_MSGMAX];
 } pk_status_t;
 
+// Pcm audio format
+typedef struct pasco_wave_format_t {
+  int num_channels;
+  int sample_rate;
+  int bits_per_sample;
+} pasco_wave_format_t;
+
 typedef struct pk_t {
   pocketkaldi::Fst *fst;
   pocketkaldi::LmFst *large_lm_fst;

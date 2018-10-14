@@ -9,216 +9,218 @@
 #include <stdint.h>
 #include "util.h"
 
+namespace {
+
 // Reads an int32 value from ptr and move it forward
-static int32_t read_int32(char **ptr) {
+static int32_t ReadInt32(char **ptr) {
   int32_t val = *((int32_t *)*ptr);
   *ptr += sizeof(int32_t);
   return val;
 }
 
 // Reads an int16 value from ptr and move it forward
-static int16_t read_int16(char **ptr) {
+static int16_t ReadInt16(char **ptr) {
   int16_t val = *((int16_t *)*ptr);
   *ptr += sizeof(int16_t);
   return val;
 }
 
 // Reads an int8 value from ptr and move it forward
-static int8_t read_int8(char **ptr) {
+static int8_t ReadInt8(char **ptr) {
   int8_t val = *((int8_t *)*ptr);
   *ptr += sizeof(int8_t);
   return val;
 }
 
-// Reads a string with length strlen(expected) from ptr, and compared with
-// expected. If the same returns true, otherwise returns false. Then move ptr
-// forward strlen(expected) bytes
-static bool check_tag(char **ptr, const char *expected) {
-  int len = strlen(expected);
-  bool is_same = strncmp(*ptr, expected, len) == 0;
-  *ptr += len;
-  return is_same;
-}
+
+}  // namespace
 
 namespace pocketkaldi {
+
+Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt) {
+  PK_CHECK_STATUS(fd->ReadAndVerifyString("RIFF"));
+
+  int32_t chunk_size = 0;
+  PK_CHECK_STATUS(fd->ReadValue<int32_t>(&chunk_size));
+  if (chunk_size != fd->file_size() - 8) {
+    return Status::Corruption(util::Format(
+        "chunk_size == {} expected, but {} found: {}",
+        fd->file_size() - 8,
+        chunk_size,
+        fd->filename()));
+  }
+
+  // Format == "WAVE"
+  PK_CHECK_STATUS(fd->ReadAndVerifyString("WAVE"));
+ 
+  // Subchunk1
+  PK_CHECK_STATUS(fd->ReadAndVerifyString("fmt "));
+  int32_t subchunk1_size = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&subchunk1_size));
+  if (subchunk1_size != 16) {
+    return Status::Corruption(util::Format(
+        "subchunk1_size == 16 expected, but {} found: {}",
+        subchunk1_size,
+        fd->filename()));
+  }
+
+  // audio_format
+  int16_t audio_format = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&audio_format));
+  if (audio_format != 1) {
+    return Status::Corruption(util::Format(
+        "audio_format == 1 expected, but {} found: {}",
+        audio_format,
+        fd->filename()));
+  }
+
+  // num_channels
+  int16_t num_channels = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&num_channels));
+  wave_fmt->num_channels = num_channels;
+
+  int32_t sample_rate = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&sample_rate));
+  wave_fmt->sample_rate = sample_rate;
+
+  // bytes_rate, block_align, bits_per_sample
+  int16_t bits_per_sample = 0;
+  int32_t bytes_rate = 0;
+  int16_t block_align = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&bytes_rate));
+  PK_CHECK_STATUS(fd->ReadValue(&block_align));
+  PK_CHECK_STATUS(fd->ReadValue(&bits_per_sample));
+
+  if (bytes_rate != sample_rate * bits_per_sample / 8) {
+    return Status::Corruption(util::Format(
+        "bytes_rate == {} expected, but {} found: {}",
+        sample_rate * bits_per_sample / 8,
+        bytes_rate,
+        fd->filename()));
+  }
+
+  if (block_align != bits_per_sample / 8) {
+    return Status::Corruption(util::Format(
+        "block_align == {} expected, but {} found: {}",
+        bits_per_sample / 8,
+        bytes_rate,
+        fd->filename()));
+  }
+  wave_fmt->bits_per_sample = bits_per_sample;
+
+  // subchunk2 "data"
+  PK_CHECK_STATUS(fd->ReadAndVerifyString("data"));
+
+  // subchunk2_size
+  int32_t subchunk2_size = 0;
+  PK_CHECK_STATUS(fd->ReadValue(&subchunk2_size));
+  if (subchunk2_size != fd->file_size() - 44) {
+    return Status::Corruption(util::Format(
+        "subchunk2_size == {} expected, but {} found: {}",
+        fd->file_size() - 44,
+        subchunk2_size,
+        fd->filename()));
+  }
+
+  return Status::OK();
+}
+
+WaveReader::WaveReader(): ready_(false) {}
+
+Status WaveReader::SetFormat(const pasco_wave_format_t &format) {
+  // num_channels
+  if (format.num_channels != 1) {
+    return Status::Corruption(util::Format(
+        "num_channels = {} not supported",
+        format.num_channels));
+  }
+
+  // sample_rate
+  if (format.sample_rate != 16000) {
+    return Status::Corruption(util::Format(
+        "sample_rate = {} not supported",
+        format.sample_rate));
+  }
+
+  // bits_per_sample
+  switch (format.bits_per_sample) {
+    case 8:
+    case 16:
+    case 32:
+      break;
+    default:
+      return Status::Corruption(util::Format(
+          "bits_per_sample == 8, 16 or 32 expected, but {} found",
+          format.bits_per_sample));
+  }
+
+  ready_ = true;
+  format_ = format;
+  return Status::OK();
+}
+
+Status WaveReader::Process(
+    const char *buffer, int size, Vector<float> *pcm_data) {
+  if (!buffer) {
+    return Status::RuntimeError("buffer is nullptr");
+  }
+  if (size <= 0) {
+    return Status::RuntimeError(util::Format("unexpected size: {}", size));
+  }
+  if (!ready_) {
+    return Status::RuntimeError("WaveReader is not ready");
+  }
+
+  // Update buffer
+  buffer_.insert(buffer_.end(), buffer, buffer + size);
+
+  // Compute bytes to process
+  int bytes_per_sample = format_.bits_per_sample / 8;
+  int num_samples = buffer_.size() / bytes_per_sample;
+  pcm_data->Resize(num_samples);
+  char *current_ptr = buffer_.data();
+  for (int i = 0; i < num_samples; ++i) {
+    switch (format_.bits_per_sample) {
+      case 8:
+        (*pcm_data)(i) = ReadInt8(&current_ptr);
+        break;
+      case 16:
+        (*pcm_data)(i) = ReadInt16(&current_ptr);
+        break;
+      case 32:
+        (*pcm_data)(i) = ReadInt32(&current_ptr);
+        break;
+      default:
+        assert(false && "unexpected bits_per_sample");
+    }
+  }
+
+  // Update buffer
+  int processed_bytes = bytes_per_sample * num_samples;
+  assert(processed_bytes <= buffer_.size());
+  buffer_.erase(buffer_.begin(), buffer_.begin() + processed_bytes);
+
+  return Status::OK();
+}
 
 // Reads 16k sampling rate, mono-channel, PCM formatted wave file, and stores
 // the data into data. If any error occured, set status to failed
 Status Read16kPcm(const char *filename, Vector<float> *pcm_data) {
-  Status status;
+  pasco_wave_format_t fmt;
+  
   util::ReadableFile fd;
-  status = fd.Open(filename);
+  PK_CHECK_STATUS(fd.Open(filename));
 
+  PK_CHECK_STATUS(ReadPcmHeader(&fd, &fmt));
+  WaveReader reader;
+  PK_CHECK_STATUS(reader.SetFormat(fmt));
 
-  // Gets file length
-  int64_t file_size = 0;
-  if (status.ok()) {
-    file_size = fd.file_size();
-  }
+  int data_size = static_cast<int>(fd.file_size() - 44);
+  std::vector<char> buffer(data_size);
+  PK_CHECK_STATUS(fd.Read(buffer.data(), data_size));
 
-  // Read file content into pcm_buffer
-  char *current_ptr = NULL;
-  std::vector<char> pcm_buffer;
-  if (status.ok()) {
-    pcm_buffer.resize(file_size);
-    current_ptr = pcm_buffer.data();
-    status = fd.Read(pcm_buffer.data(), pcm_buffer.size());
-  }
-
-  // RIFF chunk
-  if (status.ok() && check_tag(&current_ptr, "RIFF") == false) {
-    return Status::Corruption(util::Format(
-        "chunk_name == 'RIFF' expected: {}",
-        filename));
-  }
-
-  // Chunk size
-  if (status.ok()) {
-    int chunk_size = read_int32(&current_ptr);
-    if (chunk_size != file_size - 8) {
-      return Status::Corruption(util::Format(
-          "chunk_size == {} expected, but {} found: {}",
-          file_size - 8,
-          chunk_size,
-          filename));
-    }
-  }
-
-  // Format == "WAVE"
-  if (status.ok() && check_tag(&current_ptr, "WAVE") == false) {
-    return Status::Corruption(util::Format(
-        "Format == 'WAVE' expected: {}",
-        filename));
-  }
-
-  // subchunk1 is "fmt "
-  if (status.ok() && check_tag(&current_ptr, "fmt ") == false) {
-    return Status::Corruption(util::Format(
-        "subchunk1 == 'fmt ' expected: {}",
-        filename));
-  }  
-
-  // subchunk1_size
-  if (status.ok()) {
-    int subchunk1_size = read_int32(&current_ptr);
-    if (subchunk1_size != 16) {
-      return Status::Corruption(util::Format(
-          "subchunk1_size == 16 expected, but {} found: {}",
-          subchunk1_size,
-          filename));
-    }
-  }
-
-  // audio_format
-  if (status.ok()) {
-    int audio_format = read_int16(&current_ptr);
-    if (audio_format != 1) {
-      return Status::Corruption(util::Format(
-          "audio_format == 1 (PCM) expected, but {} found: {}",
-          audio_format,
-          filename));
-    }
-  }
-
-  // num_channels
-  if (status.ok()) {
-    int num_channels = read_int16(&current_ptr);
-    if (num_channels != 1) {
-      return Status::Corruption(util::Format(
-          "num_channels == 1 (mono) expected, but {} found: {}",
-          num_channels,
-          filename));
-    }
-  }
-
-  // sample_rate
-  int sample_rate = 0;
-  if (status.ok()) {
-    sample_rate = read_int32(&current_ptr);
-    if (sample_rate != 16000) {
-      return Status::Corruption(util::Format(
-          "sample_rate == 16000 expected, but {} found: {}",
-          sample_rate,
-          filename));
-    }
-  }
-
-  // bytes_rate, block_align, bits_per_sample
-  int bits_per_sample = 0;
-  if (status.ok()) {
-    int bytes_rate = read_int32(&current_ptr);
-    int block_align = read_int16(&current_ptr);
-    bits_per_sample = read_int16(&current_ptr);
-
-    if (bytes_rate != sample_rate * bits_per_sample / 8) {
-      return Status::Corruption(util::Format(
-          "bytes_rate == {} expected, but {} found: {}",
-          sample_rate * bits_per_sample / 8,
-          bytes_rate,
-          filename));
-    }
-
-    if (block_align != bits_per_sample / 8) {
-      return Status::Corruption(util::Format(
-          "block_align == {} expected, but {} found: {}",
-          bits_per_sample / 8,
-          bytes_rate,
-          filename));
-    }
-  }
-
-  // subchunk2 "data"
-  if (status.ok() && check_tag(&current_ptr, "data") == false) {
-    return Status::Corruption(util::Format(
-        "subchunk2 == 'data' expected: {}",
-        filename));
-  }
-
-  // subchunk2_size
-  int64_t subchunk2_size = 0;
-  if (status.ok()) {
-    subchunk2_size = read_int32(&current_ptr);
-    if (subchunk2_size != file_size - 44) {
-      return Status::Corruption(util::Format(
-          "subchunk2_size == {} expected, but {} found: {}",
-          file_size - 44,
-          subchunk2_size,
-          filename));
-    }
-  }
-
-  // Read data
-  if (status.ok()) {
-    int num_samples = (int)subchunk2_size / (bits_per_sample / 8);
-    pcm_data->Resize(num_samples);
-    for (int i = 0; i < num_samples && status.ok(); ++i) {
-      switch (bits_per_sample) {
-        case 8:
-          (*pcm_data)(i) = read_int8(&current_ptr);
-          break;
-        case 16:
-          (*pcm_data)(i) = read_int16(&current_ptr);
-          break;
-        case 32:
-          (*pcm_data)(i) = read_int32(&current_ptr);
-          break;
-        default:
-          return Status::Corruption(util::Format(
-              "bits_per_sample == 8, 16 or 32 expected, but {} found: {}",
-              bits_per_sample,
-              filename));
-      }
-    }
-  }
-
-  if (status.ok()) {
-    if (current_ptr != pcm_buffer.data() + file_size) {
-      return Status::Corruption(util::Format(
-          "unexpected file size: {}",
-          filename));
-    }
-  }
-
+  PK_CHECK_STATUS(reader.Process(buffer.data(), data_size, pcm_data));
+  
   return Status::OK();
 }
 

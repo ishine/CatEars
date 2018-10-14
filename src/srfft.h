@@ -27,7 +27,7 @@ class SRFFT {
       int data_size,
       bool forward,
       float *buffer,
-      int buffer_size);
+      int buffer_size) const;
 
  private:
   int N_;
@@ -41,16 +41,16 @@ class SRFFT {
   // Tables of butterfly coefficients.
   float **tab_;
 
-  void BitReversePermute(float *x, int logn);
-  void ComplexFFTCompute2(float *xr, float *xi, bool forward);
-  void ComplexfftComputeRecursive(float *xr, float *xi, int logn);
+  void BitReversePermute(float *x, int logn) const;
+  void ComplexFFTCompute2(float *xr, float *xi, bool forward) const;
+  void ComplexfftComputeRecursive(float *xr, float *xi, int logn) const;
   void ComputeTable();
   void ComplexFFTCompute(
       float *x,
       int xsize,
       bool forward,
       float *buffer,
-      int buffer_size);
+      int buffer_size) const;
 };
 
 }  // namespace pocketkaldi

@@ -27,7 +27,7 @@ class Melbanks {
   int fftbin_offset_[PK_FBANK_DIM];
   
   // Calculates the mel scale of freq
-  inline float MelScale(float freq) {
+  inline float MelScale(float freq) const {
     return 1127.0f * logf(1.0f + freq / 700.0f);
   }
 
@@ -39,7 +39,7 @@ class Melbanks {
   // At input, "fft_energies" contains the FFT energies (not log)
   void Compute(
       const Vector<float> &power_spectrum,
-      Vector<float> *mel_energies_out);
+      Vector<float> *mel_energies_out) const;
 };
 
 // Fbank feature extractor
@@ -48,15 +48,27 @@ class Fbank {
   Fbank();
   ~Fbank();
 
-  // Computes the fbank feature from wave, and then stores the result into matrix
-  // fbank_feature. Each row in fbank_feature represent a frame.
-  void Compute(const VectorBase<float> &wave, Matrix<float> *fbank_feature);
+  // Computes the fbank feature from stream, wave is the samples to process.
+  // The fbank features will be stored into matrix fbank_feature. Each row in
+  // fbank_feature represent a frame.
+  void Process(const VectorBase<float> &wave, Matrix<float> *fbank_feature);
+
+  // Reset stops processing current wave stream and start to processing a new
+  // stream
+  void Reset() {
+    wave_buffer_.Resize(0);
+  }
+
 
  private:
   int frame_length_padded_;
   Melbanks melbanks_;
   SRFFT srfft_;
   Vector<float> window_function_;
+
+  // Used for streaming mode, cached unused data here. Only this field would
+  // be changed when Process was called
+  Vector<float> wave_buffer_;
 
   // Initialize the melbanks and fbank
   void Init();
@@ -70,20 +82,20 @@ class Fbank {
   void ComputeFrame(
       Vector<float> *window,
       Vector<float> *feature,
-      Vector<float> *buffer);
+      Vector<float> *buffer) const;
 
   // 3 -> 4, 6 -> 8, 30 -> 32, this function just copied from
   // src\base\kaldi-math.cc in Kaldi.
-  int32_t RoundUpToNearestPowerOfTwo(int32_t n);
+  int32_t RoundUpToNearestPowerOfTwo(int32_t n) const;
 
   // Calculate the frame number of given audio wave, the same as NumFrames in
   // Kaldi when --snip-edges=true
-  int CalcNumFrames(const VectorBase<float> &wave);
+  int CalcNumFrames(const VectorBase<float> &wave) const;
 
   // Does all the windowing steps after actually extracting the windowed signal
   void ProcessWindow(
       const VectorBase<float> &window_function,
-      VectorBase<float> *sub_window);
+      VectorBase<float> *sub_window) const;
 
   // Extract a frame from wave and store into vector window. The frame should be
   // initialized and have more dimensions than FRAME_LENGTH (Usually the power of
@@ -92,7 +104,7 @@ class Fbank {
       const VectorBase<float> &wave,
       int frame_idx,
       const VectorBase<float> &window_function,
-      Vector<float> *window);
+      Vector<float> *window) const;
 
   // ComputePowerSpectrum converts a complex FFT (as produced by the FFT
   // functions in matrix/matrix-functions.h), and converts it into
@@ -101,7 +113,7 @@ class Fbank {
   // this function computes in the first (n/2) + 1 elements of it, the
   // energies of the fft bins from zero to the Nyquist frequency.  Contents of the
   // remaining (n/2) - 1 elements are undefined at output.
-  void ComputePowerSpectrum(Vector<float> *window);
+  void ComputePowerSpectrum(Vector<float> *window) const;
 
   // Initialize the hamming window according to FRAME_LENGTH
   void HammingWindowInit(Vector<float> *window);

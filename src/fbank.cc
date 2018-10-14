@@ -21,7 +21,7 @@
 
 namespace pocketkaldi {
 
-int32_t Fbank::RoundUpToNearestPowerOfTwo(int32_t n) {
+int32_t Fbank::RoundUpToNearestPowerOfTwo(int32_t n) const {
   assert(n > 0);
   n--;
   n |= n >> 1;
@@ -32,7 +32,7 @@ int32_t Fbank::RoundUpToNearestPowerOfTwo(int32_t n) {
   return n + 1;
 }
 
-int Fbank::CalcNumFrames(const VectorBase<float> &wave) {
+int Fbank::CalcNumFrames(const VectorBase<float> &wave) const {
   int num_samples = wave.Dim();
   if (num_samples < FRAME_LENGTH) {
     return 0;
@@ -43,7 +43,7 @@ int Fbank::CalcNumFrames(const VectorBase<float> &wave) {
 
 void Fbank::ProcessWindow(
     const VectorBase<float> &window_function,
-    VectorBase<float> *sub_window) {
+    VectorBase<float> *sub_window) const {
   // Subtract mean from waveform on each frame (--remove-dc-offset=true)
   float sum = 0;
   for (int i = 0; i < sub_window->Dim(); ++i) {
@@ -75,7 +75,7 @@ void Fbank::ExtractWindow(
     const VectorBase<float> &wave,
     int frame_idx,
     const VectorBase<float> &window_function,
-    Vector<float> *window) {
+    Vector<float> *window) const {
   int start_sample = frame_idx * FRAME_SHIFT;
   int end_sample = start_sample + FRAME_LENGTH;
 
@@ -164,7 +164,7 @@ Melbanks::Melbanks(int frame_length_padded) {
 
 void Melbanks::Compute(
     const Vector<float> &power_spectrum,
-    Vector<float> *mel_energies_out) {
+    Vector<float> *mel_energies_out) const {
   assert(mel_energies_out->Dim() == PK_FBANK_DIM &&
          "unexpected dim of mel_energies_out");
 
@@ -190,7 +190,7 @@ Melbanks::~Melbanks() {
   }
 }
 
-void Fbank::ComputePowerSpectrum(Vector<float> *window) {
+void Fbank::ComputePowerSpectrum(Vector<float> *window) const {
   int dim = window->Dim();
   assert(dim > 0 && "compute_power_spectrum: dim should be greater than 0");
   // now we have in waveform, first half of complex spectrum
@@ -219,7 +219,7 @@ void Fbank::ComputePowerSpectrum(Vector<float> *window) {
 void Fbank::ComputeFrame(
     Vector<float> *window,
     Vector<float> *feature,
-    Vector<float> *buffer) {
+    Vector<float> *buffer) const {
   assert(buffer->Dim() >= frame_length_padded_ && "buffer too small");
   assert(feature->Dim() == PK_FBANK_DIM && "feature size mismatch");
 
@@ -262,23 +262,51 @@ Fbank::Fbank() :
   HammingWindowInit(&window_function_);
 }
 
-void Fbank::Compute(
+void Fbank::Process(
     const VectorBase<float> &wave,
     Matrix<float> *fbank_feature) {
-  int num_frames = CalcNumFrames(wave);
+  // Do nothing when wave is empty
+  if (wave.Dim() == 0) {
+    fbank_feature->Resize(0, PK_FBANK_DIM);
+    return;
+  }
+
+  // Append wave to wave buffer
+  int original_size = wave_buffer_.Dim();
+  wave_buffer_.Resize(wave_buffer_.Dim() + wave.Dim(),
+                      Vector<float>::kCopyData);
+  wave_buffer_.Range(original_size, wave_buffer_.Dim() - original_size)
+              .CopyFromVec(wave);
+
+  // Ok, now we start to process wave_buffer_
+
+  int num_frames = CalcNumFrames(wave_buffer_);
   fbank_feature->Resize(num_frames, PK_FBANK_DIM);
+  if (num_frames == 0) {
+    return;
+  }
 
   // Extract fbank feature frame by frame
   Vector<float> window(frame_length_padded_, Vector<float>::kUndefined),
                 buffer(frame_length_padded_, Vector<float>::kUndefined),
                 frame_feat(PK_FBANK_DIM, Vector<float>::kUndefined);
   for (int i = 0; i < num_frames; ++i) {
-    ExtractWindow(wave, i, window_function_, &window);
+    ExtractWindow(wave_buffer_, i, window_function_, &window);
     ComputeFrame(&window, &frame_feat, &buffer);
 
     // Store the value back to frame
     fbank_feature->Row(i).CopyFromVec(frame_feat);
   }
+
+  // Remove useless sampels from wave_buffer_
+  int frames_to_remove = FRAME_SHIFT * num_frames;
+  int next_buffer_size = wave_buffer_.Dim() - frames_to_remove;
+  Vector<float> next_buffer;
+  next_buffer.Resize(next_buffer_size);
+  next_buffer.CopyFromVec(wave_buffer_.Range(frames_to_remove, next_buffer_size));
+
+  wave_buffer_.Resize(next_buffer_size);
+  wave_buffer_.CopyFromVec(next_buffer);
 }
 
 Fbank::~Fbank() {

@@ -124,7 +124,7 @@ void SRFFT::ComputeTable() {
 void SRFFT::ComplexfftComputeRecursive(
     float *xr,
     float *xi,
-    int logn) {
+    int logn) const {
   int m, m2, m4, m8, nel, n;
   float *xr1, *xr2, *xi1, *xi2;
   float *cn, *spcn, *smcn, *c3n, *spc3n, *smc3n;
@@ -266,7 +266,7 @@ void SRFFT::ComplexfftComputeRecursive(
 
 void SRFFT::BitReversePermute(
     float *x,
-    int logn)  {
+    int logn) const {
   int i, j, lg2, n;
   int off, fj, gno, *brp;
   float tmp, *xp, *xq;
@@ -293,7 +293,7 @@ void SRFFT::BitReversePermute(
 void SRFFT::ComplexFFTCompute2(
     float *xr,
     float *xi,
-    bool forward) {
+    bool forward) const {
   if (!forward) {  // reverse real and imaginary parts for complex FFT.
     float *tmp = xr;
     xr = xi;
@@ -312,7 +312,7 @@ void SRFFT::ComplexFFTCompute(
     int xsize,
     bool forward,
     float *buffer,
-    int buffer_size) {
+    int buffer_size) const {
   assert(xsize == N_ * 2 && "complexfft_compute: invalid xsize");
   assert(buffer_size >= N_ && "complexfft_compute: buffer_size too small");
 
@@ -372,7 +372,7 @@ void SRFFT::Compute(
     int data_size,
     bool forward,
     float *buffer,
-    int buffer_size) {
+    int buffer_size) const {
   int N = N_ * 2, N2 = N_;
   if (forward) {
     // call to base class
