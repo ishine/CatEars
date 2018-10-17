@@ -45,30 +45,24 @@ class Melbanks {
 // Fbank feature extractor
 class Fbank {
  public:
+  // Stores the instance data of Fbank
+  class Instance;
+  
   Fbank();
   ~Fbank();
 
   // Computes the fbank feature from stream, wave is the samples to process.
   // The fbank features will be stored into matrix fbank_feature. Each row in
   // fbank_feature represent a frame.
-  void Process(const VectorBase<float> &wave, Matrix<float> *fbank_feature);
-
-  // Reset stops processing current wave stream and start to processing a new
-  // stream
-  void Reset() {
-    wave_buffer_.Resize(0);
-  }
-
+  void Process(Instance *inst,
+               const VectorBase<float> &wave, 
+               Matrix<float> *fbank_feature) const;
 
  private:
   int frame_length_padded_;
   Melbanks melbanks_;
   SRFFT srfft_;
   Vector<float> window_function_;
-
-  // Used for streaming mode, cached unused data here. Only this field would
-  // be changed when Process was called
-  Vector<float> wave_buffer_;
 
   // Initialize the melbanks and fbank
   void Init();
@@ -117,6 +111,15 @@ class Fbank {
 
   // Initialize the hamming window according to FRAME_LENGTH
   void HammingWindowInit(Vector<float> *window);
+};
+
+// Stores the instance data of Fbank
+class Fbank::Instance {
+  friend class Fbank;
+
+  // Used for streaming mode, cached unused data here. Only this field would
+  // be changed when Process was called
+  Vector<float> wave_buffer;
 };
 
 }  // namespace pocketkaldi

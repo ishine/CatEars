@@ -263,8 +263,9 @@ Fbank::Fbank() :
 }
 
 void Fbank::Process(
+    Instance *inst,
     const VectorBase<float> &wave,
-    Matrix<float> *fbank_feature) {
+    Matrix<float> *fbank_feature) const {
   // Do nothing when wave is empty
   if (wave.Dim() == 0) {
     fbank_feature->Resize(0, PK_FBANK_DIM);
@@ -272,15 +273,15 @@ void Fbank::Process(
   }
 
   // Append wave to wave buffer
-  int original_size = wave_buffer_.Dim();
-  wave_buffer_.Resize(wave_buffer_.Dim() + wave.Dim(),
-                      Vector<float>::kCopyData);
-  wave_buffer_.Range(original_size, wave_buffer_.Dim() - original_size)
-              .CopyFromVec(wave);
+  int original_size = inst->wave_buffer.Dim();
+  inst->wave_buffer.Resize(inst->wave_buffer.Dim() + wave.Dim(),
+                           Vector<float>::kCopyData);
+  inst->wave_buffer.Range(original_size, inst->wave_buffer.Dim() - original_size)
+                   .CopyFromVec(wave);
 
   // Ok, now we start to process wave_buffer_
 
-  int num_frames = CalcNumFrames(wave_buffer_);
+  int num_frames = CalcNumFrames(inst->wave_buffer);
   fbank_feature->Resize(num_frames, PK_FBANK_DIM);
   if (num_frames == 0) {
     return;
@@ -291,7 +292,7 @@ void Fbank::Process(
                 buffer(frame_length_padded_, Vector<float>::kUndefined),
                 frame_feat(PK_FBANK_DIM, Vector<float>::kUndefined);
   for (int i = 0; i < num_frames; ++i) {
-    ExtractWindow(wave_buffer_, i, window_function_, &window);
+    ExtractWindow(inst->wave_buffer, i, window_function_, &window);
     ComputeFrame(&window, &frame_feat, &buffer);
 
     // Store the value back to frame
@@ -300,13 +301,13 @@ void Fbank::Process(
 
   // Remove useless sampels from wave_buffer_
   int frames_to_remove = FRAME_SHIFT * num_frames;
-  int next_buffer_size = wave_buffer_.Dim() - frames_to_remove;
+  int next_buffer_size = inst->wave_buffer.Dim() - frames_to_remove;
   Vector<float> next_buffer;
   next_buffer.Resize(next_buffer_size);
-  next_buffer.CopyFromVec(wave_buffer_.Range(frames_to_remove, next_buffer_size));
+  next_buffer.CopyFromVec(inst->wave_buffer.Range(frames_to_remove, next_buffer_size));
 
-  wave_buffer_.Resize(next_buffer_size);
-  wave_buffer_.CopyFromVec(next_buffer);
+  inst->wave_buffer.Resize(next_buffer_size);
+  inst->wave_buffer.CopyFromVec(next_buffer);
 }
 
 Fbank::~Fbank() {

@@ -245,8 +245,8 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
   // Extract fbank feats from raw_wave
   t = clock();
   Matrix<float> raw_feats;
-  recognizer->fbank->Process(utt->internal->raw_wave, &raw_feats);
-  recognizer->fbank->Reset();
+  Fbank::Instance fbank_inst;
+  recognizer->fbank->Process(&fbank_inst, utt->internal->raw_wave, &raw_feats);
   t = clock() - t;
   fputs(pocketkaldi::util::Format("Fbank: {}ms\n", ((float)t) / CLOCKS_PER_SEC  * 1000).c_str(), stderr);
 

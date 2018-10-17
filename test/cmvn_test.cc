@@ -52,8 +52,9 @@ void TestOnlineCmvn() {
 
   // Computes fbank feature
   Fbank fbank;
+  Fbank::Instance fbank_inst;
   Matrix<float> fbank_feat;
-  fbank.Process(pcm_data, &fbank_feat);
+  fbank.Process(&fbank_inst, pcm_data, &fbank_feat);
 
   // Read global stats from file
   ReadableFile fd;

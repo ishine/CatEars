@@ -34,9 +34,10 @@ void TestFbank() {
 
   // Calculate fbank feature
   Fbank fbank;
+  Fbank::Instance fbank_inst;
   Matrix<float> fbank_feat;
 
-  fbank.Process(pcm_data, &fbank_feat);
+  fbank.Process(&fbank_inst, pcm_data, &fbank_feat);
   std::vector<float> fbank_featvec;
   for (int i = 0; i < fbank_feat.NumRows(); ++i) {
     SubVector<float> row = fbank_feat.Row(i);
@@ -102,6 +103,7 @@ void TestFbankStreaming() {
 
   // Calculate fbank feature
   Fbank fbank;
+  Fbank::Instance fbank_inst;
   Matrix<float> fbank_feat;
   WaveReader wave_reader;
   status = wave_reader.SetFormat(fmt);
@@ -111,7 +113,7 @@ void TestFbankStreaming() {
   std::vector<float> fbank_featvec;
   for (const std::vector<char> &chunk : chunks) {
     wave_reader.Process(chunk.data(), chunk.size(), &pcm_data);
-    fbank.Process(pcm_data, &fbank_feat);
+    fbank.Process(&fbank_inst, pcm_data, &fbank_feat);
     for (int i = 0; i < fbank_feat.NumRows(); ++i) {
       SubVector<float> row = fbank_feat.Row(i);
       for (int j = 0; j < row.Dim(); ++j) {
