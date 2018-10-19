@@ -26,9 +26,9 @@ class AcousticModel {
   // Read AcousticModel from configuration file
   Status Read(const Configuration &conf);
 
-  // Convert transition-id to pdf-id
-  int TransitionIdToPdfId(int transition_id) const {
-    return tid2pdf_(transition_id);
+  // Gets the map from transition-id to pdf-id
+  const Vector<int32_t> &TransitionPdfIdMap() const {
+    return tid2pdf_;
   }
 
   // Compute the log-likelihood of the feature matrix

@@ -65,15 +65,21 @@ class Decoder {
 
   // Initialize the decoder with the FST graph fst. It just borrows the pointer
   // of fst and not own it.
-  Decoder(const Fst *fst, const DeltaLmFst *delta_lm_fst = nullptr);
+  Decoder(const Fst *fst,
+          const Vector<int32_t> &transtion_pdf_id_map,
+          float am_scale,
+          const DeltaLmFst *delta_lm_fst = nullptr);
   ~Decoder();
 
-  // Decodes the Decodable object, the best path could be obtain by
-  // Decoder::BestPath()
-  bool Decode(Decodable *decodable);
+  // Initialize decoding and put the root state into beam
+  void Initialize();
 
-  // Return true if reached the final state
-  bool ReachedFinal();
+  // Process and decode current frame (log probability), the best path could be
+  // obtain by Decoder::BestPath()
+  bool Process(const VectorBase<float> &frame_logp);
+
+  // Change the state to end-of-stream
+  void EndOfStream() { is_end_of_stream_ = true; }
 
   // Get best hypothesis from lattice.
   Hypothesis BestPath();
@@ -96,9 +102,6 @@ class Decoder {
   // \return the cutoff of cost to beam size in prev_toks_
   double GetCutoff(float *adaptive_beam, Token **best_tok);
 
-  // Initialize decoding and put the root state into beam
-  void InitDecoding();
-
   // Insert tok into self->toks_ with next_state and its output_label. And it
   // will either insert a new token or update existing token in the beam.
   // return true if successfully inserted. Otherwise, when the cost of
@@ -111,11 +114,14 @@ class Decoder {
 
   // Process the emitting (non-epsilon) arcs of each states in the beam
   // \return cutoff of next weight
-  float ProcessEmitting(Decodable *decodable);
+  float ProcessEmitting(const VectorBase<float> &frame_logp);
 
   // Propogate the lm_state with ilabel in DeltaLmFst. Return the next state
   // in DeltaLmFst and set weight to the cost of transition.
   int32_t PropogateLm(int32_t lm_state, int ilabel, float *weight);
+
+  // Get log likelihood of transition-id in current frame
+  float LogLikelihood(const VectorBase<float> &frame_logp, int trans_id) const;
 
   // Only used in get_cutoff()
   std::vector<float> costs_;
@@ -143,6 +149,15 @@ class Decoder {
 
   // Storea all output-label nodes
   GCPool<OLabel> olabels_pool_;
+
+  // Scale for AM
+  float am_scale_;
+
+  // true if current stream is end
+  bool is_end_of_stream_;
+
+  // Map from transition-id pdf-id
+  const Vector<int32_t> &transtion_pdf_id_map_;
 
   // Beam threshold
   float beam_;

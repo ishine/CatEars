@@ -265,17 +265,25 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
     feats.CopyFromMat(raw_feats);
   }
 
+  // Compute log_prob by AM
+  Matrix<float> log_prob;
+  recognizer->am->Compute(feats, &log_prob);
 
   // Start to decode
-  Decoder decoder(recognizer->fst, recognizer->delta_lm_fst);
-  Decodable decodable(recognizer->am, 0.1, feats);
+  Decoder decoder(recognizer->fst,
+                  recognizer->am->TransitionPdfIdMap(),
+                  0.1,
+                  recognizer->delta_lm_fst);
   t = clock();
-  decodable.Compute();
+  decoder.Initialize();
+  for (int frame_idx = 0; frame_idx < log_prob.NumRows(); ++frame_idx) {
+    decoder.Process(log_prob.Row(frame_idx));
+  }
+  decoder.EndOfStream();
   t = clock() - t;
   fprintf(stderr, "NNET: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
   
   // Decoding
-  decoder.Decode(&decodable);
   Decoder::Hypothesis hyp = decoder.BestPath();
 
   // Get final result

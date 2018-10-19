@@ -46,10 +46,17 @@ Decoder::Hypothesis::Hypothesis(const std::vector<int> &words, float weight):
     words_(words),
     weight_(weight) {
 }
-Decoder::Decoder(const Fst *fst, const DeltaLmFst *delta_lm_fst):
-    fst_(fst),
-    beam_(16.0),
-    state_idx_(kBeamSize * 4) {
+Decoder::Decoder(
+    const Fst *fst,
+    const Vector<int32_t> &transtion_pdf_id_map,
+    float am_scale,
+    const DeltaLmFst *delta_lm_fst):
+        fst_(fst),
+        beam_(16.0),
+        state_idx_(kBeamSize * 4),
+        transtion_pdf_id_map_(transtion_pdf_id_map),
+        am_scale_(am_scale),
+        is_end_of_stream_(false) {
   if (delta_lm_fst) {
     delta_lm_fst_ = std::unique_ptr<CachedFst>(
         new CachedFst(delta_lm_fst, 1000000));
@@ -60,51 +67,41 @@ Decoder::~Decoder() {
   fst_ = nullptr;
 }
 
-bool Decoder::Decode(Decodable *decodable) {
-  clock_t t;
+bool Decoder::Process(const VectorBase<float> &frame_logp) {
+  PK_DEBUG(util::Format("frame: {}", num_frames_decoded_));
 
-  // Extract fbank feats from raw_wave
-  clock_t t_all = clock();
-  clock_t t_emitting = 0;
-  clock_t t_nonemitting = 0;
+  double cutoff = ProcessEmitting(frame_logp);
+  if (!std::isfinite(cutoff)) return false;
   
-  PK_DEBUG("InitDecoding()");
-  InitDecoding();
-  while(!decodable->IsLastFrame(num_frames_decoded_ - 1)) {
-    PK_DEBUG(util::Format("frame: {}", num_frames_decoded_));
-    t = clock();
-    double cutoff = ProcessEmitting( decodable);
-    if (!std::isfinite(cutoff)) break;
-    t_emitting += clock() - t;
-    
-    t = clock();
-    ProcessNonemitting(cutoff);
-    t_nonemitting = clock() - t;
+  ProcessNonemitting(cutoff);
 
-    // Exit when there is no active tokens
-    if (toks_.size() == 0) break;
+  // Exit when there is no active tokens
+  if (toks_.size() == 0) return false;
 
-    // GC of olabel nodes
-    if (num_frames_decoded_ % 20 == 0) {
-      double free_nodes = olabels_pool_.free_nodes();
-      double allocated_nodes = olabels_pool_.allocated_nodes();
+  // GC of olabel nodes
+  if (num_frames_decoded_ % 20 == 0) {
+    double free_nodes = olabels_pool_.free_nodes();
+    double allocated_nodes = olabels_pool_.allocated_nodes();
 
-      std::vector<OLabel *> olabel_root;
-      for (Token *tok : toks_) {
-        if (tok->olabel()) olabel_root.push_back(tok->olabel());
-      }
-      olabels_pool_.GC(olabel_root);
+    std::vector<OLabel *> olabel_root;
+    for (Token *tok : toks_) {
+      if (tok->olabel()) olabel_root.push_back(tok->olabel());
     }
+    olabels_pool_.GC(olabel_root);
   }
 
-  t_all = clock() - t_all;
-  fprintf(stderr, "decode: %lfms\n", ((float)t_all) / CLOCKS_PER_SEC  * 1000);
-  fprintf(stderr, "  process_emitting: %lfms\n", ((float)t_emitting) / CLOCKS_PER_SEC  * 1000);
-  fprintf(stderr, "  process_nonemitting: %lfms\n", ((float)t_nonemitting) / CLOCKS_PER_SEC  * 1000);
-  return toks_.size() > 0;
+  num_frames_decoded_++;
+  return true;
 }
 
-void Decoder::InitDecoding() {
+float Decoder::LogLikelihood(const VectorBase<float> &frame_logp,
+                             int trans_id) const {
+  int pdf_id = transtion_pdf_id_map_(trans_id);
+  float logp = frame_logp(pdf_id);
+  return am_scale_ * logp;
+}
+
+void Decoder::Initialize() {
   // Prepare beams
   toks_.clear();
   prev_toks_.clear();
@@ -294,7 +291,7 @@ void Decoder::ProcessNonemitting(double cutoff) {
 }
 
 // Process the emitting (non-epsilon) arcs of each states in the beam
-float Decoder::ProcessEmitting(Decodable *decodable) {
+float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
   PK_DEBUG("ProcessEmitting()");
   // Clear the prev_toks_
   state_idx_.Clear();
@@ -325,9 +322,7 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
   while ((arc = arc_iter.Next()) != nullptr) {
     if (arc->input_label == 0) continue;
 
-    float acoustic_cost = -decodable->LogLikelihood(
-        num_frames_decoded_,
-        arc->input_label);
+    float acoustic_cost = -LogLikelihood(frame_logp, arc->input_label);
     double total_cost = best_tok->cost() + arc->weight + acoustic_cost;
 
     // Online compose with G' when available
@@ -356,9 +351,7 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
     while ((arc = arc_iter.Next()) != nullptr) {
       if (arc->input_label == 0) continue;
 
-      float ac_cost = -decodable->LogLikelihood(
-          num_frames_decoded_,
-          arc->input_label);
+      float ac_cost = -LogLikelihood(frame_logp, arc->input_label);
       double total_cost = from_tok->cost() + arc->weight + ac_cost;
 
       // Online compose with G' when available
@@ -386,7 +379,6 @@ float Decoder::ProcessEmitting(Decodable *decodable) {
 
     toks_pool_.Dealloc(from_tok);
   }
-  num_frames_decoded_++;
 
   // All pointers in prev_toks_ is freed
   prev_toks_.clear();
@@ -405,9 +397,12 @@ Decoder::Hypothesis Decoder::BestPath() {
   for (int i = 0; i < toks_.size(); ++i) {
     Token *tok = toks_[i];
     State state = tok->state();
-    double cost = tok->cost() + fst_->Final(state.hclg_state());
+    double cost = tok->cost();
 
-    if (delta_lm_fst_) {
+    if (is_end_of_stream_) {
+      cost += fst_->Final(state.hclg_state());
+    }
+    if (delta_lm_fst_ && is_end_of_stream_) {
       float lm_weight = delta_lm_fst_->Final(tok->state().lm_state());
       cost += lm_weight;
     }
