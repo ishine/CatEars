@@ -8,6 +8,8 @@
 
 namespace pocketkaldi {
 
+AcousticModel::Instance::Instance(): started(false) {}
+
 AcousticModel::AcousticModel() :
     left_context_(0),
     right_context_(0),
@@ -63,67 +65,104 @@ Status AcousticModel::Read(const Configuration &conf) {
   return Status::OK();
 }
 
-int AcousticModel::PrepareChunk(
-    const MatrixBase<float> &frames,
-    int begin_frame,
-    Matrix<float> *chunk) {
-  assert(begin_frame < frames.NumRows() && "begin_frame out of boundary");
-  int frames_remained = frames.NumRows() - begin_frame;
-  int chunk_size = frames_remained > chunk_size_  
-      ? chunk_size_
-      : frames_remained;
-  chunk->Resize(chunk_size + left_context_ + right_context_, frames.NumCols());
-  int offset = 0;
-
-  // Left context
-  for (int lc = left_context_; lc >= 1; --lc) {
-    int tl = begin_frame - lc;
-    if (tl < 0) tl = 0;
-    chunk->Row(offset).CopyFromVec(frames.Row(tl));
-    ++offset;
-  }
-
-  // Chunk
-  for (int t = begin_frame; t < begin_frame + chunk_size; ++t) {
-    assert(t < frames.NumRows() && "t out of boundary");
-    chunk->Row(offset).CopyFromVec(frames.Row(t));
-    ++offset;
-  }
-
-  // Right context
-  for (int rc = 0; rc < right_context_; ++rc) {
-    int tr = begin_frame + chunk_size + rc;
-    if (tr >= frames.NumRows()) tr = frames.NumRows() - 1;
-    chunk->Row(offset).CopyFromVec(frames.Row(tr));
-    ++offset;
-  }
-
-  assert(offset == chunk->NumRows());
-  return chunk_size;
+void AcousticModel::AppendFrame(Instance *inst,
+                                const VectorBase<float> &frame_feat) const {
+  Vector<float> frame(frame_feat.Dim());
+  frame.CopyFromVec(frame_feat);
+  inst->feats_buffer.emplace_back(std::move(frame));
 }
 
-void AcousticModel::Compute(
-    const MatrixBase<float> &frames,
-    Matrix<float> *log_prob) {
-  Matrix<float> chunk_input, chunk_output;
-  log_prob->Resize(frames.NumRows(), log_prior_.Dim());
-
-  // Propagate chunk by chunk
-  for (int t = 0; t < frames.NumRows(); t += chunk_size_) {
-    int chunk_size = PrepareChunk(frames, t, &chunk_input);
-    nnet_.Propagate(chunk_input, &chunk_output);
-    assert(chunk_output.NumRows() == chunk_size && "invalid nnet");
-
-    for (int r = t; r < t + chunk_output.NumRows(); ++r) {
-      log_prob->Row(r).CopyFromVec(chunk_output.Row(r - t));
-    }
+bool AcousticModel::BatchAvailable(Instance *inst) const {
+  int frames_available = inst->feats_buffer.size();
+  if (frames_available >= left_context_ + right_context_ + chunk_size_) {
+    return true;
+  } else {
+    return false;
   }
+}
+
+void AcousticModel::ComputeBatch(Instance *inst,
+                                 int batch_size,
+                                 Matrix<float> *log_prob) const {
+  if (batch_size == kBatchSizeAll) {
+    batch_size = inst->feats_buffer.size() - left_context_ - right_context_;
+    assert(batch_size > 0 && "ComputeBatch: insufficient data");
+  }
+  if (batch_size == 0) {
+    log_prob->Resize(0, log_prob->NumCols());
+    return;
+  }
+
+  // Prepare input matrix
+  int batch_input_size = batch_size + left_context_ + right_context_;
+  assert(inst->feats_buffer.size() >= batch_input_size &&
+         "ComputeBatch: insufficient data");
+  int feat_dim = inst->feats_buffer[0].Dim();
+  Matrix<float> batch_input(batch_input_size, feat_dim);
+  for (int i = 0; i < batch_input_size; ++i) {
+    batch_input.Row(i).CopyFromVec(inst->feats_buffer[i]);
+  }
+
+  // Propogate through nn
+  nnet_.Propagate(batch_input, log_prob);
+  assert(log_prob->NumRows() == batch_size && "invalid nnet");
 
   // Compute log-likelihood
   for (int r = 0; r < log_prob->NumRows(); ++r) {
     SubVector<float> row = log_prob->Row(r);
     row.AddVec(-1.0f, log_prior_);
   }
+}
+
+void AcousticModel::Process(Instance *inst,
+                            const VectorBase<float> &frame_feat,
+                            Matrix<float> *log_prob) const {
+  // Add left padding frames
+  if (!inst->started) {
+    for (int i = 0; i < left_context_; ++i) {
+      AppendFrame(inst, frame_feat);
+    }
+    inst->started = true;
+  }
+
+  // Add current frame
+  AppendFrame(inst, frame_feat);
+
+  
+  if (!BatchAvailable(inst)) {
+    log_prob->Resize(0, 0);
+    return;
+  }
+
+  // A batch of frames is available
+  ComputeBatch(inst, chunk_size_, log_prob);
+
+  // Remove useless frames
+  for (int i = 0; i < chunk_size_; ++i) {
+    inst->feats_buffer.pop_front();
+  }
+}
+
+void AcousticModel::EndOfStream(Instance *inst, Matrix<float> *log_prob) const {
+  // Do nothing if feature buffer is empty
+  if (inst->feats_buffer.empty()) {
+    log_prob->Resize(0, 0);
+    return;
+  }
+
+  // Add right padding frames
+  const VectorBase<float> &last_frame = inst->feats_buffer.back();
+  for (int i = 0; i < right_context_; ++i) {
+    AppendFrame(inst, last_frame);
+  }
+
+  // Do nothing when no enough frames to compute
+  if (inst->feats_buffer.size() <= left_context_ + right_context_) {
+    log_prob->Resize(0, 0);
+    return;
+  }
+
+  ComputeBatch(inst, kBatchSizeAll, log_prob);
 }
 
 }  // namespace pocketkaldi

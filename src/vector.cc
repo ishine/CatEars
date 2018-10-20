@@ -10,6 +10,24 @@
 namespace pocketkaldi {
 
 template<typename Real>
+Vector<Real>::Vector(Vector<Real> &&v) {
+  this->dim_ = v.dim_;
+  this->data_ = v.data_;
+
+  v.dim_ = 0;
+  v.data_ = nullptr;
+}
+
+template<typename Real>
+Vector<Real> &Vector<Real>::operator=(Vector<Real> &&v) {
+  this->dim_ = v.dim_;
+  this->data_ = v.data_;
+
+  v.dim_ = 0;
+  v.data_ = nullptr;
+}
+
+template<typename Real>
 inline void Vector<Real>::Init(int dim) {
   assert(dim >= 0);
   if (dim == 0) {

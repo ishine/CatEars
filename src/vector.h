@@ -186,6 +186,10 @@ class Vector: public VectorBase<Real> {
   /// Constructor that takes no arguments.  Initializes to empty.
   Vector(): VectorBase<Real>() {}
 
+  // Move constructor
+  Vector(Vector<Real> &&v);
+  Vector<Real> &operator=(Vector<Real> &&v);
+
   /// Constructor with specific size.  Sets to all-zero by default
   /// if set_zero == false, memory contents are undefined.
   explicit Vector(const int s, int resize_type = kSetZero)
@@ -218,7 +222,8 @@ class Vector: public VectorBase<Real> {
 
   /// Destroy function, called internally.
   void Destroy();
-
+  
+  DISALLOW_COPY_AND_ASSIGN(Vector);
 };
 
 

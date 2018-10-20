@@ -9,7 +9,6 @@
 #include <string>
 #include "am.h"
 #include "cmvn.h"
-#include "decodable.h"
 #include "decoder.h"
 #include "fbank.h"
 #include "fst.h"
@@ -30,7 +29,6 @@ using pocketkaldi::VectorBase;
 using pocketkaldi::Matrix;
 using pocketkaldi::SubVector;
 using pocketkaldi::AcousticModel;
-using pocketkaldi::Decodable;
 using pocketkaldi::SymbolTable;
 using pocketkaldi::LmFst;
 using pocketkaldi::DeltaLmFst;
@@ -265,24 +263,34 @@ void pk_process(pk_t *recognizer, pk_utterance_t *utt) {
     feats.CopyFromMat(raw_feats);
   }
 
-  // Compute log_prob by AM
-  Matrix<float> log_prob;
-  recognizer->am->Compute(feats, &log_prob);
-
   // Start to decode
   Decoder decoder(recognizer->fst,
                   recognizer->am->TransitionPdfIdMap(),
                   0.1,
                   recognizer->delta_lm_fst);
-  t = clock();
   decoder.Initialize();
-  for (int frame_idx = 0; frame_idx < log_prob.NumRows(); ++frame_idx) {
-    decoder.Process(log_prob.Row(frame_idx));
+
+  // Compute log_prob by AM
+  Matrix<float> log_prob;
+  AcousticModel::Instance am_inst;
+  for (int frame_idx = 0; frame_idx < feats.NumRows(); ++frame_idx) {
+    SubVector<float> frame_feats = feats.Row(frame_idx);
+    recognizer->am->Process(&am_inst, frame_feats, &log_prob);
+    if (log_prob.NumRows() != 0) {
+      for (int r = 0; r < log_prob.NumRows(); ++r) {
+        decoder.Process(log_prob.Row(r));
+      }
+    }
+  }
+
+  recognizer->am->EndOfStream(&am_inst, &log_prob);
+  if (log_prob.NumRows() != 0) {
+    for (int r = 0; r < log_prob.NumRows(); ++r) {
+      decoder.Process(log_prob.Row(r));
+    }
   }
   decoder.EndOfStream();
-  t = clock() - t;
-  fprintf(stderr, "NNET: %lfms\n", ((float)t) / CLOCKS_PER_SEC  * 1000);
-  
+
   // Decoding
   Decoder::Hypothesis hyp = decoder.BestPath();
 

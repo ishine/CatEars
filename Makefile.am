@@ -21,7 +21,6 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/nnet.cc \
                            src/am.cc \
                            src/vector.cc \
-                           src/decodable.cc \
                            src/symbol_table.cc \
                            src/pocketkaldi.cc \
                            src/hashtable.cc \
