@@ -4,47 +4,55 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pocketkaldi.h"
+#include "pasco.h"
 #include "status.h"
 #include "util.h"
 
-using pocketkaldi::Status;
 using pocketkaldi::util::ReadableFile;
 using pocketkaldi::util::Split;
+using pocketkaldi::Status;
 
-void check_and_report_error(const pk_status_t *status) {
-  if (!status->ok) {
-    printf("pocketkaldi: %s\n", status->message);
-    exit(1);
-  }
+void Fatal(const std::string &msg) {
+  printf("error: %s\n", msg.c_str());
+  exit(22);
 }
 
 void CheckStatus(const Status &status) {
   if (!status.ok()) {
-    printf("pocketkaldi: %s\n", status.what().c_str());
+    printf("pasco: %s\n", status.what().c_str());
     exit(1);
   }
 }
 
 // Process one utterance and return its hyp
-std::string ProcessAudio(pk_t *recognizer, const std::string &filename) {
-  pk_status_t status;
-  pk_status_init(&status);
+std::string ProcessAudio(pasco_t *recognizer, const std::string &filename) {
+  pasco_wave_format_t wav_fmt;
 
-  pk_utterance_t utt;
-  pk_utterance_init(&utt);
-  pk_read_audio(&utt, filename.c_str(), &status);
-  check_and_report_error(&status);
+  FILE *fd = fopen(filename.c_str(), "r");
+  if (NULL == fd) Fatal("unable to open: " + filename);
+  if (NULL == pasco_read_pcm_header(fd, &wav_fmt)) Fatal(pasco_last_error());
 
-  pk_process(recognizer, &utt);
-  std::string hyp = utt.hyp;
+  pasco_utt_t *utt = pasco_utt_init(recognizer, &wav_fmt);
+  if (NULL == utt) Fatal(pasco_last_error());
 
-  pk_utterance_destroy(&utt);
+  char buffer[1024];
+  while (!feof(fd)) {
+    int bytes_read = fread(buffer, 1, sizeof(buffer), fd);
+    if (bytes_read == 0) break;
+
+    pasco_process(utt, buffer, bytes_read);
+  }
+
+  pasco_end_of_stream(utt);
+  std::string hyp = utt->hyp;
+  pasco_utt_destroy(utt);
+  fclose(fd);
+
   return hyp;
 }
 
 // Process a list of utterances
-void process_scp(pk_t *recognizer, const char *filename) {
+void process_scp(pasco_t *recognizer, const char *filename) {
   // Read each line in scp file
   ReadableFile fd;
   Status status = fd.Open(filename);
@@ -82,21 +90,17 @@ int main(int argc, char **argv) {
   const char *input_file = argv[2];
   if (strlen(input_file) < 4) print_usage();
 
-  pk_t recognizer;
-  pk_status_t status;
-  pk_status_init(&status);
-  pk_init(&recognizer);
-  pk_load(&recognizer, model_file, &status);
-  check_and_report_error(&status);
+  pasco_t *recognizer = pasco_init(model_file);
+  if (NULL == recognizer) Fatal(pasco_last_error());
 
   const char *suffix = input_file + strlen(input_file) - 4;
   if (strcmp(suffix, ".wav") == 0) {
-    std::string hyp = ProcessAudio(&recognizer, input_file);
+    std::string hyp = ProcessAudio(recognizer, input_file);
     puts(hyp.c_str());
   } else {
-    process_scp(&recognizer, input_file);
+    process_scp(recognizer, input_file);
   }
 
-  pk_destroy(&recognizer);
+  pasco_destroy(recognizer);
   return 0;
 }

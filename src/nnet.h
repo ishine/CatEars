@@ -4,6 +4,7 @@
 #define POCKETKALDI_NNET_H_
 
 #include <vector>
+#include <memory>
 #include "matrix.h"
 #include "util.h"
 #include "gemm.h"

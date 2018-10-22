@@ -83,6 +83,9 @@ class Decoder {
   // Get best hypothesis from lattice.
   Hypothesis BestPath();
 
+  // Returns number of frames decoded
+  int NumFramesDecoded() const { return num_frames_decoded_; }
+
  private:
   // Token represents a state in the viterbi lattice. olabel_idx is the index
   // of its corresponded outpu label link-list in the list impl->olabels

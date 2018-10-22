@@ -22,7 +22,7 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/am.cc \
                            src/vector.cc \
                            src/symbol_table.cc \
-                           src/pocketkaldi.cc \
+                           src/pasco.cc \
                            src/hashtable.cc \
                            src/configuration.cc \
                            src/gemm.cc

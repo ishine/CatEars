@@ -9,7 +9,7 @@
 
 #include <stdio.h>
 #include <math.h>
-#include "pocketkaldi.h"
+#include "pasco.h"
 #include "util.h"
 #include "vector.h"
 #include "gemm.h"

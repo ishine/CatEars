@@ -42,13 +42,6 @@ Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt) {
 
   int32_t chunk_size = 0;
   PK_CHECK_STATUS(fd->ReadValue<int32_t>(&chunk_size));
-  if (chunk_size != fd->file_size() - 8) {
-    return Status::Corruption(util::Format(
-        "chunk_size == {} expected, but {} found: {}",
-        fd->file_size() - 8,
-        chunk_size,
-        fd->filename()));
-  }
 
   // Format == "WAVE"
   PK_CHECK_STATUS(fd->ReadAndVerifyString("WAVE"));
@@ -114,13 +107,6 @@ Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt) {
   // subchunk2_size
   int32_t subchunk2_size = 0;
   PK_CHECK_STATUS(fd->ReadValue(&subchunk2_size));
-  if (subchunk2_size != fd->file_size() - 44) {
-    return Status::Corruption(util::Format(
-        "subchunk2_size == {} expected, but {} found: {}",
-        fd->file_size() - 44,
-        subchunk2_size,
-        fd->filename()));
-  }
 
   return Status::OK();
 }

@@ -282,10 +282,13 @@ void Fbank::Process(
   // Ok, now we start to process wave_buffer_
 
   int num_frames = CalcNumFrames(inst->wave_buffer);
-  fbank_feature->Resize(num_frames, PK_FBANK_DIM);
   if (num_frames == 0) {
+    fbank_feature->Resize(0, 0);
     return;
   }
+
+  fbank_feature->Resize(num_frames, PK_FBANK_DIM);
+
 
   // Extract fbank feature frame by frame
   Vector<float> window(frame_length_padded_, Vector<float>::kUndefined),

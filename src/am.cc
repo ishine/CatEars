@@ -30,8 +30,6 @@ Status AcousticModel::Read(const Configuration &conf) {
   std::string nnet_filename;
   status = conf.GetPath("nnet", &nnet_filename);
   if (!status.ok()) return status;
-  pk_status_t c_status;
-  pk_status_init(&c_status);
 
   util::ReadableFile fd;
   PK_CHECK_STATUS(fd.Open(nnet_filename));

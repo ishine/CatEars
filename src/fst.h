@@ -8,10 +8,12 @@
 #include <utility>
 #include "util.h"
 #include "status.h"
-#include "pocketkaldi.h"
+#include "pasco.h"
 #include "vector.h"
 
 namespace pocketkaldi {
+
+class SymbolTable;
 
 struct FstArc {
   int32_t next_state;

@@ -12,50 +12,6 @@
 #include <array>
 #include <algorithm>
 
-void pk_status_init(pk_status_t *status) {
-  status->ok = true;
-  status->errcode = 0;
-  status->message[0] = '\0';
-}
-
-void pk_status_fail(pk_status_t *status, int errcode, const char *fmsg, ...) {
-  status->ok = false;
-  status->errcode = errcode;
-  const char *error_prefix = NULL;
-  char unknown_error[128];
-  char msg[128];
-
-  // Gets error message from fmsg
-  va_list args;
-  va_start(args, fmsg);
-  vsnprintf(msg, sizeof(msg), fmsg, args);
-  va_end(args);
-  
-  // Gets string representation of error code
-  switch (errcode) {
-    case PK_STATUS_STIOERROR:
-      error_prefix = "IOError";
-      break;
-    case PK_STATUS_STCORRUPTED:
-      error_prefix = "Corrupted";
-      break;
-    default:
-      snprintf(
-          unknown_error,
-          sizeof(unknown_error),
-          "UnknownError(%d)",
-          errcode);
-      error_prefix = unknown_error;
-  }
-
-  snprintf(
-      status->message,
-      PK_STATUS_MSGMAX,
-      "%s: %s",
-      error_prefix,
-      msg);
-}
-
 namespace pocketkaldi {
 namespace util {
 
@@ -104,11 +60,15 @@ Status StringToLong(const std::string &str, long *val) {
 }
 
 
-ReadableFile::ReadableFile(): fd_(nullptr), file_size_(0) {
+ReadableFile::ReadableFile(): fd_(nullptr), file_size_(0), owned_(true) {
+}
+
+ReadableFile::ReadableFile(FILE *fd):
+    fd_(fd), file_size_(0), owned_(false) {
 }
 
 ReadableFile::~ReadableFile() {
-  if (fd_ != nullptr) fclose(fd_);
+  if (fd_ != nullptr && owned_) fclose(fd_);
   fd_ = NULL;
 }
 
@@ -187,14 +147,9 @@ bool ReadableFile::Eof() const {
 }
 
 void ReadableFile::Close() {
+  assert(owned_ && "unable to call Close() in borrowed mode");
   if (fd_ != nullptr) fclose(fd_);
   fd_ = nullptr;
-}
-
-void ToRawStatus(const Status &s, pk_status_t *cs) {
-  cs->errcode = s.code();
-  cs->ok = s.ok();
-  pk_strlcpy(cs->message, s.what().c_str(), PK_STATUS_MSGMAX);
 }
 
 }  // namespace util

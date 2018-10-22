@@ -12,7 +12,7 @@
 #include <iostream>
 #include <utility>
 #include <vector>
-#include "pocketkaldi.h"
+#include "pasco.h"
 #include "status.h"
 
 // Error types for status
@@ -39,22 +39,8 @@
 // #define PK_DEBUG(msg) std::cout << __FILE__ << ": " << (msg) << std::endl;
 #define PK_DEBUG(msg)
 
-// Initialize the status set to success (ok) state
-POCKETKALDI_EXPORT
-void pk_status_init(pk_status_t *status);
-
-// Set status to failed state with message
-POCKETKALDI_EXPORT
-void pk_status_fail(pk_status_t *status, int errcode, const char *fmsg, ...);
-
-#define PK_STATUS_IOERROR(status, fmsg, ...) \
-    pk_status_fail(status, PK_STATUS_STIOERROR, fmsg, __VA_ARGS__)
-
-#define PK_STATUS_CORRUPTED(status, fmsg, ...) \
-    pk_status_fail(status, PK_STATUS_STCORRUPTED, fmsg, __VA_ARGS__)
-
 // The same as strlcpy in FreeBSD
-size_t pk_strlcpy(char *dst, const char *src, size_t siz);
+size_t pasco_strlcpy(char *dst, const char *src, size_t siz);
 
 // 
 namespace pocketkaldi {
@@ -125,6 +111,9 @@ class ReadableFile {
   ReadableFile();
   ~ReadableFile();
 
+  // Initialize ReadableFile with a borrowed FILE pointer
+  ReadableFile(FILE *fd);
+
   // Return true if end-of-file reached
   bool Eof() const;
 
@@ -152,6 +141,7 @@ class ReadableFile {
 
   // Return filesize
   int64_t file_size() const {
+    assert(owned_ && "unable to call file_size() in borrowed mode");
     return file_size_;
   }
 
@@ -168,6 +158,7 @@ class ReadableFile {
   std::string filename_;
   FILE *fd_;
   int64_t file_size_;
+  bool owned_;
 };
 
 // To check if a class have 'previous' field
@@ -179,9 +170,6 @@ struct has_previous {
     value = (sizeof(check<T>(0)) == sizeof(int8_t))
   };
 };
-
-// Convert to C status
-void ToRawStatus(const Status &s, pk_status_t *cs);
 
 }  // namespace util
 }  // namespace pocketkaldi
