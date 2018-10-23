@@ -2,7 +2,6 @@
 #include "vector.h"
 
 #include <math.h>
-#include <cblas.h>
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
@@ -25,6 +24,8 @@ Vector<Real> &Vector<Real>::operator=(Vector<Real> &&v) {
 
   v.dim_ = 0;
   v.data_ = nullptr;
+
+  return *this;
 }
 
 template<typename Real>

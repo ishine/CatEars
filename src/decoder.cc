@@ -325,13 +325,6 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
     float acoustic_cost = -LogLikelihood(frame_logp, arc->input_label);
     double total_cost = best_tok->cost() + arc->weight + acoustic_cost;
 
-    // Online compose with G' when available
-    if (delta_lm_fst_) {
-      float lm_weight = 0.0f;
-      PropogateLm(best_state.lm_state(), arc->output_label, &lm_weight);
-      total_cost += lm_weight;
-    }
-
     if (total_cost + adaptive_beam < next_weight_cutoff) {
       next_weight_cutoff = total_cost + adaptive_beam;
     }
@@ -353,6 +346,12 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
 
       float ac_cost = -LogLikelihood(frame_logp, arc->input_label);
       double total_cost = from_tok->cost() + arc->weight + ac_cost;
+      
+      // Prune the toks whose cost is too high
+      if (total_cost > next_weight_cutoff) continue;
+      if (total_cost + adaptive_beam < next_weight_cutoff) {
+        next_weight_cutoff = total_cost + adaptive_beam;
+      }
 
       // Online compose with G' when available
       int32_t lm_state = state.lm_state();
@@ -360,12 +359,6 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
         float lm_weight = 0.0f;
         lm_state = PropogateLm(state.lm_state(), arc->output_label, &lm_weight);
         total_cost += lm_weight;
-      }
-      
-      // Prune the toks whose cost is too high
-      if (total_cost > next_weight_cutoff) continue;
-      if (total_cost + adaptive_beam < next_weight_cutoff) {
-        next_weight_cutoff = total_cost + adaptive_beam;
       }
 
       // Create and insert the tok into toks_
