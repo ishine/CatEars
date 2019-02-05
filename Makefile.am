@@ -59,9 +59,7 @@ endif
 TESTS = fst_test \
         srfft_test \
         fbank_test \
-        cmvn_test \
         nnet_test \
-        symbol_table_test \
         hashtable_test \
         configuration_test \
         pool_test \
@@ -70,9 +68,7 @@ TESTS = fst_test \
 check_PROGRAMS = fst_test \
                  srfft_test \
                  fbank_test \
-                 cmvn_test \
                  nnet_test \
-                 symbol_table_test \
                  hashtable_test \
                  configuration_test \
                  pool_test \
@@ -94,10 +90,6 @@ fst_test_SOURCES = test/fst_test.cc
 fst_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
 fst_test_LDADD = libpocketkaldi.a
 
-symbol_table_test_SOURCES = test/symbol_table_test.cc
-symbol_table_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-symbol_table_test_LDADD = libpocketkaldi.a
-
 srfft_test_SOURCES = test/srfft_test.cc
 srfft_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
 srfft_test_LDADD = libpocketkaldi.a
@@ -105,10 +97,6 @@ srfft_test_LDADD = libpocketkaldi.a
 fbank_test_SOURCES = test/fbank_test.cc
 fbank_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
 fbank_test_LDADD = libpocketkaldi.a
-
-cmvn_test_SOURCES = test/cmvn_test.cc
-cmvn_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-cmvn_test_LDADD = libpocketkaldi.a
 
 nnet_test_SOURCES = test/nnet_test.cc
 nnet_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
