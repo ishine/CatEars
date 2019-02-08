@@ -6,9 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <cblas.h>
 #include "util.h"
-#include "gemm.h"
-
 
 namespace pocketkaldi {
 
@@ -292,21 +291,26 @@ void SimpleMatMat<float>(
 void MatMat(
     const MatrixBase<float> &A,
     const MatrixBase<float> &B,
-    MatrixBase<float> *C,
-    GEMM<float> *sgemm) {
-  assert(B.NumCols() == C->NumCols());
-  assert(A.NumRows() == C->NumRows());
-  assert(A.NumCols() == B.NumRows());
+    MatrixBase<float> *C) {
+  assert(A.NumCols() == B.NumRows() &&
+         A.NumRows() == C->NumRows() &&
+         B.NumCols() == C->NumCols());
 
-  sgemm->Gemm(
+  cblas_sgemm(
+      CblasRowMajor,
+      CblasNoTrans,
+      CblasNoTrans,
       A.NumRows(),
       B.NumCols(),
       A.NumCols(),
       1.0f,
-      A.Data(), A.Stride(), 1,
-      B.Data(), B.Stride(), 1,
+      A.Data(),
+      A.Stride(),
+      B.Data(),
+      B.Stride(),
       0.0f,
-      C->Data(), C->Stride(), 1);
+      C->Data(),
+      C->Stride());
 }
 
 }  // namespace pocketkaldi

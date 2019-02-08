@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <functional>
-#include "pasco.h"
+#include "ce_stt.h"
 
 namespace pocketkaldi {
 

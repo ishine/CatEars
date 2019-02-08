@@ -37,7 +37,7 @@ static int8_t ReadInt8(char **ptr) {
 
 namespace pocketkaldi {
 
-Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt) {
+Status ReadPcmHeader(util::ReadableFile *fd, ce_wave_format_t *wave_fmt) {
   PK_CHECK_STATUS(fd->ReadAndVerifyString("RIFF"));
 
   int32_t chunk_size = 0;
@@ -113,7 +113,7 @@ Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt) {
 
 WaveReader::WaveReader(): ready_(false) {}
 
-Status WaveReader::SetFormat(const pasco_wave_format_t &format) {
+Status WaveReader::SetFormat(const ce_wave_format_t &format) {
   // num_channels
   if (format.num_channels != 1) {
     return Status::Corruption(util::Format(
@@ -192,7 +192,7 @@ Status WaveReader::Process(
 // Reads 16k sampling rate, mono-channel, PCM formatted wave file, and stores
 // the data into data. If any error occured, set status to failed
 Status Read16kPcm(const char *filename, Vector<float> *pcm_data) {
-  pasco_wave_format_t fmt;
+  ce_wave_format_t fmt;
   
   util::ReadableFile fd;
   PK_CHECK_STATUS(fd.Open(filename));

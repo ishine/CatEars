@@ -9,10 +9,9 @@
 
 #include <stdio.h>
 #include <math.h>
-#include "pasco.h"
+#include "ce_stt.h"
 #include "util.h"
 #include "vector.h"
-#include "gemm.h"
 
 namespace pocketkaldi {
 
@@ -238,8 +237,7 @@ void SimpleMatMat(
 void MatMat(
     const MatrixBase<float> &A,
     const MatrixBase<float> &B,
-    MatrixBase<float> *C,
-    GEMM<float> *sgemm);
+    MatrixBase<float> *C);
 
 }  // namespace pocketkaldi
 

@@ -8,7 +8,7 @@
 #include <utility>
 #include "util.h"
 #include "status.h"
-#include "pasco.h"
+#include "ce_stt.h"
 #include "vector.h"
 
 namespace pocketkaldi {

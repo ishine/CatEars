@@ -39,7 +39,7 @@ Status Read16kPcm(const char *filename, Vector<float> *pcm_data);
 // Read the header of a wave file (fd), and save the format information into
 // wave_fmt. It read util the end of header, so after ReadPcmHeader() was called
 // fd is at the begining of wave data
-Status ReadPcmHeader(util::ReadableFile *fd, pasco_wave_format_t *wave_fmt);
+Status ReadPcmHeader(util::ReadableFile *fd, ce_wave_format_t *wave_fmt);
 
 // Read wave data (without header) and convert to Vector<float>
 class WaveReader {
@@ -48,7 +48,7 @@ class WaveReader {
 
   // Set the format of current wave stream, if format not supported, return
   // failure status
-  Status SetFormat(const pasco_wave_format_t &format);
+  Status SetFormat(const ce_wave_format_t &format);
 
   // Process a chunk of data and convert to Vector<float>
   Status Process(const char *buffer, int size, Vector<float> *pcm_data);
@@ -60,7 +60,7 @@ class WaveReader {
 
  private:
   std::vector<char> buffer_;
-  pasco_wave_format_t format_;
+  ce_wave_format_t format_;
   bool ready_;
 };
 

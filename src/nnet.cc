@@ -4,7 +4,6 @@
 
 #include <assert.h>
 #include <math.h>
-#include "gemm.h"
 
 namespace pocketkaldi {
 
@@ -27,8 +26,7 @@ void LinearLayer::Propagate(
   out->Resize(in.NumRows(), W_.NumCols());
 
   // xW
-  GEMM<float> sgemm;
-  MatMat(in, W_, out, &sgemm);
+  MatMat(in, W_, out);
 
   // + b
   for (int row_idx = 0; row_idx < out->NumRows(); ++row_idx) {

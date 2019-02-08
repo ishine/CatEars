@@ -93,7 +93,7 @@ void TestFbankStreaming() {
   Status status = fd_wav.Open(wav_file);
   assert(status.ok());
 
-  pasco_wave_format_t fmt;
+  ce_wave_format_t fmt;
   status = ReadPcmHeader(&fd_wav, &fmt);
   assert(status.ok());
 

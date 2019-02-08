@@ -16,7 +16,7 @@
 #include "matrix.h"
 #include "vector.h"
 #include "pcm_reader.h"
-#include "pasco.h"
+#include "ce_stt.h"
 
 namespace pocketkaldi {
 

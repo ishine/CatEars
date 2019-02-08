@@ -7,7 +7,6 @@
 #include <memory>
 #include "matrix.h"
 #include "util.h"
-#include "gemm.h"
 
 #define PK_NNET_SECTION "NN02"
 #define PK_NNET_LAYER_SECTION "LAY0"

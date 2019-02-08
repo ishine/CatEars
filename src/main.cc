@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pasco.h"
+#include "ce_stt.h"
 #include "status.h"
 #include "util.h"
 
@@ -25,34 +25,34 @@ void CheckStatus(const Status &status) {
 }
 
 // Process one utterance and return its hyp
-std::string ProcessAudio(pasco_t *recognizer, const std::string &filename) {
-  pasco_wave_format_t wav_fmt;
+std::string ProcessAudio(ce_stt_t *recognizer, const std::string &filename) {
+  ce_wave_format_t wav_fmt;
 
   FILE *fd = fopen(filename.c_str(), "r");
   if (NULL == fd) Fatal("unable to open: " + filename);
-  if (NULL == pasco_read_pcm_header(fd, &wav_fmt)) Fatal(pasco_last_error());
+  if (NULL == ce_read_pcm_header(fd, &wav_fmt)) Fatal(ce_stt_last_error());
 
-  pasco_utt_t *utt = pasco_utt_init(recognizer, &wav_fmt);
-  if (NULL == utt) Fatal(pasco_last_error());
+  ce_utt_t *utt = ce_utt_init(recognizer, &wav_fmt);
+  if (NULL == utt) Fatal(ce_stt_last_error());
 
   char buffer[1024];
   while (!feof(fd)) {
     int bytes_read = fread(buffer, 1, sizeof(buffer), fd);
     if (bytes_read == 0) break;
 
-    pasco_process(utt, buffer, bytes_read);
+    ce_stt_process(utt, buffer, bytes_read);
   }
 
-  pasco_end_of_stream(utt);
+  ce_stt_end_of_stream(utt);
   std::string hyp = utt->hyp;
-  pasco_utt_destroy(utt);
+  ce_utt_destroy(utt);
   fclose(fd);
 
   return hyp;
 }
 
 // Process a list of utterances
-void process_scp(pasco_t *recognizer, const char *filename) {
+void process_scp(ce_stt_t *recognizer, const char *filename) {
   // Read each line in scp file
   ReadableFile fd;
   Status status = fd.Open(filename);
@@ -90,8 +90,8 @@ int main(int argc, char **argv) {
   const char *input_file = argv[2];
   if (strlen(input_file) < 4) print_usage();
 
-  pasco_t *recognizer = pasco_init(model_file);
-  if (NULL == recognizer) Fatal(pasco_last_error());
+  ce_stt_t *recognizer = ce_stt_init(model_file);
+  if (NULL == recognizer) Fatal(ce_stt_last_error());
 
   const char *suffix = input_file + strlen(input_file) - 4;
   if (strcmp(suffix, ".wav") == 0) {
@@ -101,6 +101,6 @@ int main(int argc, char **argv) {
     process_scp(recognizer, input_file);
   }
 
-  pasco_destroy(recognizer);
+  ce_stt_destroy(recognizer);
   return 0;
 }

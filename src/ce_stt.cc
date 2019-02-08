@@ -1,6 +1,6 @@
 // Created at 2017-03-29
 
-#include "pasco.h"
+#include "ce_stt.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -38,7 +38,7 @@ using pocketkaldi::ReadPcmHeader;
 using pocketkaldi::WaveReader;
 
 
-typedef struct pasco_t {
+typedef struct ce_stt_t {
   pocketkaldi::Fst *fst;
   pocketkaldi::LmFst *large_lm_fst;
   pocketkaldi::DeltaLmFst *delta_lm_fst;
@@ -46,18 +46,18 @@ typedef struct pasco_t {
   pocketkaldi::AcousticModel *am;
   pocketkaldi::Fbank *fbank;
   pocketkaldi::SymbolTable *symbol_table;
-} pasco_t;
+} ce_stt_t;
 
 // The internal version of an utterance. It stores the intermediate state in
 // decoding.
-typedef struct pasco_utt_internal_t {
-  const pasco_t *recognizer;
+typedef struct ce_utt_internal_t {
+  const ce_stt_t *recognizer;
 
   WaveReader wave_reader;
   Fbank::Instance fbank_inst;
   AcousticModel::Instance am_inst;
   std::unique_ptr<Decoder> decoder;
-} pasco_utt_internal_t;
+} ce_utt_internal_t;
 
 namespace {
 
@@ -65,7 +65,7 @@ namespace {
 char error_message[2048] = "";
 
 // Read symbol table
-Status ReadSymbolTable(pasco_t *self, const Configuration &conf) {
+Status ReadSymbolTable(ce_stt_t *self, const Configuration &conf) {
   std::string filename = conf.GetPathOrElse("symbol_table", "");
   if (filename == "") {
     return pocketkaldi::Status::Corruption(pocketkaldi::util::Format(
@@ -79,7 +79,7 @@ Status ReadSymbolTable(pasco_t *self, const Configuration &conf) {
 }
 
 // Read and initialize delta lm fst
-Status ReadDeltaLmFst(pasco_t *self, const Configuration &conf) {
+Status ReadDeltaLmFst(ce_stt_t *self, const Configuration &conf) {
   std::string large_lm_file = conf.GetPathOrElse("large_lm", "");
 
   // If delta_lm_fst is not enables
@@ -115,7 +115,7 @@ Status ReadDeltaLmFst(pasco_t *self, const Configuration &conf) {
 }
 
 // Reads the HCLG fst
-Status ReadHclgFst(pasco_t *self, const Configuration &conf) {
+Status ReadHclgFst(ce_stt_t *self, const Configuration &conf) {
   ReadableFile fd;
   std::string filename = conf.GetPathOrElse("fst", "");
   if (filename == "") {
@@ -130,23 +130,23 @@ Status ReadHclgFst(pasco_t *self, const Configuration &conf) {
 }
 
 // Checks if parameter utt is correct. On success return 0, on failed return
-// PASCO_FAILED and copy error string into error_message
-int32_t CheckParamUtt(pasco_utt_t *utt) {
+// CE_STT_FAILED and copy error string into error_message
+int32_t CheckParamUtt(ce_utt_t *utt) {
   if (utt == nullptr) {
     pasco_strlcpy(error_message, "utt is NULL", sizeof(error_message));
-    return PASCO_FAILED;
+    return CE_STT_FAILED;
   }
   if (utt->internal == nullptr) {
     pasco_strlcpy(error_message, "utt->internal is NULL", sizeof(error_message));
-    return PASCO_FAILED;
+    return CE_STT_FAILED;
   }
 
-  const pasco_t *recognizer = utt->internal->recognizer;
+  const ce_stt_t *recognizer = utt->internal->recognizer;
   if (recognizer == nullptr) {
     pasco_strlcpy(error_message,
                   "utt->internal->recognizer is NULL", 
                   sizeof(error_message));
-    return PASCO_FAILED;
+    return CE_STT_FAILED;
   }
 
   return 0;
@@ -154,11 +154,11 @@ int32_t CheckParamUtt(pasco_utt_t *utt) {
 
 // Get the hypothesis from best path in pattice and convert it into text format.
 // Then store into utt->hyp
-void StoreHypText(pasco_utt_t *utt) {
+void StoreHypText(ce_utt_t *utt) {
   PK_DEBUG("StoreHypText()");
 
   // Decoding
-  const pasco_t *recognizer = utt->internal->recognizer;
+  const ce_stt_t *recognizer = utt->internal->recognizer;
   Decoder *decoder = utt->internal->decoder.get();
   Decoder::Hypothesis hyp = decoder->BestPath();
 
@@ -189,9 +189,9 @@ void StoreHypText(pasco_utt_t *utt) {
 
 }  // namespace
 
-pasco_t *pasco_init(const char *config_file) {
-  pasco_t *recognizer = new pasco_t;
-  memset(recognizer, '\0', sizeof(pasco_t));
+ce_stt_t *ce_stt_init(const char *config_file) {
+  ce_stt_t *recognizer = new ce_stt_t;
+  memset(recognizer, '\0', sizeof(ce_stt_t));
 
   Status status;
 
@@ -224,12 +224,12 @@ pasco_t *pasco_init(const char *config_file) {
   if (false) {
 pasco_init_failed:
     pasco_strlcpy(error_message, status.what().c_str(), sizeof(error_message));
-    pasco_destroy(recognizer);
+    ce_stt_destroy(recognizer);
     return nullptr;
   }
 }
 
-void pasco_destroy(pasco_t *recognizer) {
+void ce_stt_destroy(ce_stt_t *recognizer) {
   delete recognizer->fst;
   recognizer->fst = nullptr;
 
@@ -252,10 +252,9 @@ void pasco_destroy(pasco_t *recognizer) {
   recognizer->fbank = NULL;
 }
 
-pasco_utt_t *pasco_utt_init(pasco_t *recognizer,
-                            const pasco_wave_format_t *format) {
-  pasco_utt_t *c_utt = new pasco_utt_t;
-  pasco_utt_internal_t *utt = new pasco_utt_internal_t;
+ce_utt_t *ce_utt_init(ce_stt_t *recognizer, const ce_wave_format_t *format) {
+  ce_utt_t *c_utt = new ce_utt_t;
+  ce_utt_internal_t *utt = new ce_utt_internal_t;
 
   utt->decoder = std::unique_ptr<Decoder>(new Decoder(
       recognizer->fst,
@@ -273,7 +272,7 @@ pasco_utt_t *pasco_utt_init(pasco_t *recognizer,
   Status status = utt->wave_reader.SetFormat(*format);
   if (!status.ok()) {
     pasco_strlcpy(error_message, status.what().c_str(), sizeof(error_message));
-    pasco_utt_destroy(c_utt);
+    ce_utt_destroy(c_utt);
     return nullptr;
   }
 
@@ -282,7 +281,7 @@ pasco_utt_t *pasco_utt_init(pasco_t *recognizer,
   return c_utt;
 }
 
-void pasco_utt_destroy(pasco_utt_t *c_utt) {
+void ce_utt_destroy(ce_utt_t *c_utt) {
   delete[] c_utt->hyp;
   c_utt->hyp = nullptr;
 
@@ -292,16 +291,16 @@ void pasco_utt_destroy(pasco_utt_t *c_utt) {
   delete c_utt;
 }
 
-int32_t pasco_process(pasco_utt_t *c_utt, const char *data, int32_t size) {
+int32_t ce_stt_process(ce_utt_t *c_utt, const char *data, int32_t size) {
   Vector<float> samples;
   Matrix<float> feats;
   Matrix<float> log_prob;
 
-  if (PASCO_FAILED == CheckParamUtt(c_utt)) {
-    return PASCO_FAILED;
+  if (CE_STT_FAILED == CheckParamUtt(c_utt)) {
+    return CE_STT_FAILED;
   }
-  const pasco_t *recognizer = c_utt->internal->recognizer;
-  pasco_utt_internal_t *utt = c_utt->internal;
+  const ce_stt_t *recognizer = c_utt->internal->recognizer;
+  ce_utt_internal_t *utt = c_utt->internal;
 
   // Bytes to samples
   Status status = utt->wave_reader.Process(data, size, &samples);
@@ -335,18 +334,18 @@ int32_t pasco_process(pasco_utt_t *c_utt, const char *data, int32_t size) {
   if (false) {
 pasco_process_failed:
     pasco_strlcpy(error_message, status.what().c_str(), sizeof(error_message));
-    return PASCO_FAILED;
+    return CE_STT_FAILED;
   }
 }
 
-void pasco_end_of_stream(pasco_utt_t *c_utt) {
+void ce_stt_end_of_stream(ce_utt_t *c_utt) {
   PK_DEBUG("pasco_end_of_stream()");
-  pasco_utt_internal_t *utt = c_utt->internal;
+  ce_utt_internal_t *utt = c_utt->internal;
 
-  if (PASCO_FAILED == CheckParamUtt(c_utt)) {
+  if (CE_STT_FAILED == CheckParamUtt(c_utt)) {
     return;
   }
-  const pasco_t *recognizer = c_utt->internal->recognizer;
+  const ce_stt_t *recognizer = c_utt->internal->recognizer;
 
   // Process remained frames in AM
   Matrix<float> log_prob;
@@ -361,8 +360,7 @@ void pasco_end_of_stream(pasco_utt_t *c_utt) {
   StoreHypText(c_utt);
 }
 
-pasco_wave_format_t *pasco_read_pcm_header(FILE *fp,
-                                           pasco_wave_format_t *format) {
+ce_wave_format_t *ce_read_pcm_header(FILE *fp, ce_wave_format_t *format) {
   ReadableFile fd(fp);
   Status status = ReadPcmHeader(&fd, format);
   if (!status.ok()) {
@@ -373,6 +371,6 @@ pasco_wave_format_t *pasco_read_pcm_header(FILE *fp,
   return format;
 }
 
-const char *pasco_last_error() {
+const char *ce_stt_last_error() {
   return error_message;
 }

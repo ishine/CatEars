@@ -4,7 +4,7 @@
 #define POCKETKALDI_SRFFT_H_
 
 #include <stdbool.h>
-#include "pasco.h"
+#include "ce_stt.h"
 
 namespace pocketkaldi {
 
