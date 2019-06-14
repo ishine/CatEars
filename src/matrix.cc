@@ -7,9 +7,15 @@
 #include <string.h>
 #include <math.h>
 #include <cblas.h>
+#include <limits>
 #include "util.h"
 
+#include "gemmlowp/eight_bit_int_gemm/eight_bit_int_gemm.h"
+
 namespace pocketkaldi {
+
+using gemmlowp::eight_bit_int_gemm::BitDepthSetting;
+using gemmlowp::eight_bit_int_gemm::EightBitIntGemm;
 
 template<typename Real>
 void MatrixBase<Real>::CopyFromMat(const MatrixBase<Real> &M, int trans) {
@@ -261,6 +267,9 @@ template class MatrixBase<float>;
 template class MatrixBase<double>;
 template class SubMatrix<float>;
 template class SubMatrix<double>;
+template class Matrix<uint8_t>;
+template class MatrixBase<uint8_t>;
+
 
 // C <- A * B
 template<typename Real>
@@ -312,5 +321,103 @@ void MatMat(
       C->Data(),
       C->Stride());
 }
+
+namespace {
+
+// Find min and max value in Matrix. Assuming data in src was continuous
+// (src.Stride() == src.NumCols())
+void FindMinMax(const MatrixBase<float> &src, float *pmin, float *pmax) {
+  float min = std::numeric_limits<float>::max(),
+        max = std::numeric_limits<float>::min();
+
+  for (int i = 0; i < src.NumCols() * src.NumRows(); ++i) {
+    float val = src.Data()[i];
+    if (val > max) {
+      max = val;
+    }
+    if (val < min) {
+      min = val;
+    }
+  }
+
+  *pmin = min;
+  *pmax = max;
+}
+
+// Compute the 8-bit quantization parameters for matrix
+void ComputeQuantizationParams(const MatrixBase<float> &src,
+                               QuantizationParams *quant_params) {
+  // Find min and max value in matrix
+  float min, max;
+  FindMinMax(src, &min, &max);
+
+  double scale = (max - min) / 255.0;
+
+  // Find zero-point
+  double f_zero_point = -min / scale;
+  int32_t zero_point = static_cast<int32_t>(round(f_zero_point));
+
+  quant_params->zero_point = zero_point;
+  quant_params->scale = static_cast<float>(scale);
+}
+
+}  // namespace 
+
+void Quantize(const MatrixBase<float> &src, Matrix<uint8_t> *dest,
+              QuantizationParams *params) {
+  assert(src.Stride() == src.NumCols());
+  assert(src.NumCols() != 0 && src.NumRows() != 0);
+
+  ComputeQuantizationParams(src, params);
+
+  // Allocate 8-bit dest matrix
+  if (dest->NumCols() != src.NumCols() || dest->NumRows() != src.NumRows()) {
+    dest->Resize(src.NumRows(), src.NumCols(), Matrix<uint8_t>::kUndefined);
+  }
+
+  // Quantize
+  const float *src_data = src.Data();
+  uint8_t *dest_data = dest->Data();
+  for (int i = 0; i < src.NumCols() * src.NumRows(); ++i) {
+    float val = src_data[i];
+    val = val / params->scale + params->zero_point;
+    val = std::max(0.0f, std::min(val, 255.0f));
+    dest_data[i] = static_cast<uint8_t>(roundf(val));
+  }
+}
+
+void MatMat_U8U8F32(
+    const MatrixBase<uint8_t> &A,
+    const QuantizationParams &quant_params_A,
+    const MatrixBase<uint8_t> &B,
+    const QuantizationParams &quant_params_B,
+    MatrixBase<float> *C) {
+  assert(A.NumCols() == B.NumRows() &&
+         A.NumRows() == C->NumRows() &&
+         B.NumCols() == C->NumCols());
+    assert(A.NumCols() * A.NumRows() > 1 &&
+           B.NumCols() * B.NumRows() > 1);
+  int32_t offset_A = -quant_params_A.zero_point;
+  int32_t offset_B = -quant_params_B.zero_point;
+
+  float offset_C = quant_params_A.scale * quant_params_B.scale;
+  EightBitIntGemm(true,
+                  true,
+                  true,
+                  A.NumRows(),
+                  B.NumCols(),
+                  A.NumCols(),
+                  A.Data(),
+                  offset_A,
+                  A.NumCols(),
+                  B.Data(),
+                  offset_B,
+                  B.NumCols(),
+                  C->Data(),
+                  offset_C,
+                  C->NumCols(),
+                  BitDepthSetting::A8B8);
+}
+
 
 }  // namespace pocketkaldi

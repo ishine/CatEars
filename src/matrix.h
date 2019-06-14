@@ -8,6 +8,7 @@
 #define PK_MATRIX_SECTION "MAT0"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <math.h>
 #include "ce_stt.h"
 #include "util.h"
@@ -226,6 +227,17 @@ class SubMatrix : public MatrixBase<Real> {
   ~SubMatrix<Real>() {}
 };
 
+// Parameters for 8-bit quantization
+struct QuantizationParams {
+  float scale;
+  int32_t zero_point;
+};
+
+// Quantize float matrix into 8-bit. Output 8-bit matrix and quantization
+// parameters
+void Quantize(const MatrixBase<float> &src, Matrix<uint8_t> *dest,
+              QuantizationParams *params);
+
 // C <- A * B
 template<typename Real>
 void SimpleMatMat(
@@ -239,6 +251,17 @@ void MatMat(
     const MatrixBase<float> &B,
     MatrixBase<float> *C);
 
+// Multiplies 8-bit quant matrix A and B, then store and float32 retulr into C
+void MatMat_U8U8F32(
+    const MatrixBase<uint8_t> &A,
+    const QuantizationParams &quant_params_A,
+    const MatrixBase<uint8_t> &B,
+    const QuantizationParams &quant_params_B,
+    MatrixBase<float> *C);
+
 }  // namespace pocketkaldi
+
+
+
 
 #endif  // POCKETKALDI_MATRIX_H_

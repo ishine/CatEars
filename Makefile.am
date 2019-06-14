@@ -1,14 +1,15 @@
 ACLOCAL_AMFLAGS = -I m4
 AUTOMAKE_OPTIONS = gnu subdir-objects foreign
 AM_CFLAGS = 
-AM_CXXFLAGS = -I$(top_srcdir)/src -g -fPIC -std=c++11
+AM_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11
 AM_LDFLAGS = -pthread 
 LIBS = -lm
 
 bin_PROGRAMS = pocketkaldi
 pocketkaldi_SOURCES = src/main.cc
 
-lib_LIBRARIES = libpocketkaldi.a
+lib_LIBRARIES = libpocketkaldi.a libgemmlowp.a
+
 libpocketkaldi_a_SOURCES = src/util.cc \
                            src/fst.cc \
                            src/matrix.cc \
@@ -25,8 +26,11 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/ce_stt.cc \
                            src/hashtable.cc \
                            src/configuration.cc                            
+pocketkaldi_LDADD = libpocketkaldi.a libgemmlowp.a -lstdc++ -lopenblas
 
-pocketkaldi_LDADD = libpocketkaldi.a -lstdc++ -lopenblas
+libgemmlowp_a_SOURCES = src/gemmlowp/eight_bit_int_gemm/eight_bit_int_gemm.cc
+libgemmlowp_a_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11 -DGEMMLOWP_AVX2 -march=native
+
 
 if ENABLE_TOOLS
     AM_CXXFLAGS += -I$(KALDI_ROOT)/src -I$(KALDI_ROOT)/tools/openfst-1.6.5/include
@@ -54,7 +58,8 @@ TESTS = fst_test \
         nnet_test \
         hashtable_test \
         configuration_test \
-        pool_test 
+        pool_test \
+        gemm_test
 
 check_PROGRAMS = fst_test \
                  srfft_test \
@@ -62,35 +67,40 @@ check_PROGRAMS = fst_test \
                  nnet_test \
                  hashtable_test \
                  configuration_test \
-                 pool_test 
+                 pool_test \
+                 gemm_test
 
 configuration_test_SOURCES = test/configuration_test.cc
 configuration_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-configuration_test_LDADD = libpocketkaldi.a -lopenblas
+configuration_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 hashtable_test_SOURCES = test/hashtable_test.cc
 hashtable_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
-hashtable_test_LDADD = libpocketkaldi.a -lopenblas
+hashtable_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 fst_test_SOURCES = test/fst_test.cc
 fst_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-fst_test_LDADD = libpocketkaldi.a -lopenblas
+fst_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 srfft_test_SOURCES = test/srfft_test.cc
 srfft_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
-srfft_test_LDADD = libpocketkaldi.a -lopenblas
+srfft_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 fbank_test_SOURCES = test/fbank_test.cc
 fbank_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-fbank_test_LDADD = libpocketkaldi.a -lopenblas
+fbank_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 nnet_test_SOURCES = test/nnet_test.cc
 nnet_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
-nnet_test_LDADD = libpocketkaldi.a -lopenblas
+nnet_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
+
+gemm_test_SOURCES = test/gemm_test.cc
+gemm_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src -DTESTDIR=\"$(top_srcdir)/test/\"
+gemm_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 pool_test_SOURCES = test/pool_test.cc
 pool_test_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(top_srcdir)/src
-pool_test_LDADD = libpocketkaldi.a -lopenblas
+pool_test_LDADD = libpocketkaldi.a libgemmlowp.a -lopenblas
 
 if ENABLE_TOOLS
     TESTS_ENVIRONMENT = export testdir=$(top_srcdir)/test && export kaldiroot=$(KALDI_ROOT) &&

@@ -305,5 +305,7 @@ template class Vector<double>;
 template class VectorBase<double>;
 template class Vector<int32_t>;
 template class VectorBase<int32_t>;
+template class Vector<uint8_t>;
+template class VectorBase<uint8_t>;
 
 }  // namespace pocketkaldi
