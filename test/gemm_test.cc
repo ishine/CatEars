@@ -58,7 +58,7 @@ void PrintMatrix(const MatrixBase<float> &m) {
 }
 
 // Generate a random matrix that filled with random numbers between (min, max]
-float GenerateRandomMatrix(
+void GenerateRandomMatrix(
     int num_row, int num_col, 
     float min, float max, Matrix<float> *mat) {
   mat->Resize(num_row, num_col, Matrix<float>::kUndefined);
@@ -73,6 +73,7 @@ float GenerateRandomMatrix(
       (*mat)(row, col) = dis(gen);
     }
   }
+
 }
 
 void TestSgemm() {

@@ -32,6 +32,8 @@
 #include "vector.h"
 #include "pool.h"
 #include "fst.h"
+#undef DISALLOW_COPY_AND_ASSIGN
+#include "fst/fstlib.h"
 #include "am.h"
 
 namespace pocketkaldi {
@@ -64,7 +66,7 @@ class Decoder {
 
   // Initialize the decoder with the FST graph fst. It just borrows the pointer
   // of fst and not own it.
-  Decoder(const Fst *fst,
+  Decoder(const fst::Fst<fst::StdArc> *fst,
           const Vector<int32_t> &transtion_pdf_id_map,
           float am_scale,
           const DeltaLmFst *delta_lm_fst = nullptr);
@@ -129,7 +131,7 @@ class Decoder {
   std::vector<float> costs_;
 
   // FST graph used for decoding
-  const Fst *fst_;
+  const fst::Fst<fst::StdArc> *fst_;
 
   // Additional graph F = G^{-1} o G', where G^{-1} is the same as G in HCLG
   // graph except that all the weights are negative. G' is a big language model

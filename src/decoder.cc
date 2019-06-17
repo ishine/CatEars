@@ -47,7 +47,7 @@ Decoder::Hypothesis::Hypothesis(const std::vector<int> &words, float weight):
     weight_(weight) {
 }
 Decoder::Decoder(
-    const Fst *fst,
+    const fst::Fst<fst::StdArc> *fst,
     const Vector<int32_t> &transtion_pdf_id_map,
     float am_scale,
     const DeltaLmFst *delta_lm_fst):
@@ -107,7 +107,7 @@ void Decoder::Initialize() {
   prev_toks_.clear();
 
   // Initialize decoding:
-  int start_state = fst_->StartState();
+  int start_state = fst_->Start();
   assert(start_state >= 0);
 
   int lm_start_state = 0;
@@ -256,22 +256,23 @@ void Decoder::ProcessNonemitting(double cutoff) {
     int tok_idx = state_idx_.Find(state, kNotExist);
     assert(tok_idx != kNotExist);
 
-    Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
-    const FstArc *arc = nullptr;
-    while ((arc = arc_iter.Next()) != nullptr) {
+    for (fst::ArcIterator<fst::Fst<fst::StdArc>> arc_iter(*fst_, state.hclg_state());
+         !arc_iter.Done();
+         arc_iter.Next()) {
       // propagate nonemitting only...
-      if (arc->input_label != 0) continue;
+      fst::StdArc arc = arc_iter.Value();
+      if (arc.ilabel != 0) continue;
 
       const float ac_cost = 0.0;
       const Token *from_tok = toks_[tok_idx];
-      double total_cost = from_tok->cost() + arc->weight + ac_cost;
+      double total_cost = from_tok->cost() + arc.weight.Value() + ac_cost;
 
       // Online compose with G' when available
       State state = from_tok->state();
       int32_t lm_state = state.lm_state();
       if (delta_lm_fst_) {
         float lm_weight = 0.0f;
-        lm_state = PropogateLm(lm_state, arc->output_label, &lm_weight);
+        lm_state = PropogateLm(lm_state, arc.olabel, &lm_weight);
         total_cost += lm_weight;
       }
 
@@ -281,11 +282,11 @@ void Decoder::ProcessNonemitting(double cutoff) {
       // If the token successfully inserted or updated in the beam, `inserted`
       // will be true and then we will push the new state into `queue`
       bool inserted = InsertTok(
-          State(arc->next_state, lm_state),
-          arc->output_label,
+          State(arc.nextstate, lm_state),
+          arc.olabel,
           from_tok->olabel(),
           total_cost);
-      if (inserted) queue.push_back(State(arc->next_state, lm_state));
+      if (inserted) queue.push_back(State(arc.nextstate, lm_state));
     }
   }
 }
@@ -317,13 +318,14 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
   // reasonably tight bound on the next cutoff.
   State best_state = best_tok->state();
   PK_DEBUG(util::Format("best_state = {}", best_state));
-  Fst::ArcIterator arc_iter = fst_->IterateArcs(best_state.hclg_state());
-  const FstArc *arc = nullptr;
-  while ((arc = arc_iter.Next()) != nullptr) {
-    if (arc->input_label == 0) continue;
+    for (fst::ArcIterator<fst::Fst<fst::StdArc>> arc_iter(*fst_, best_state.hclg_state());
+         !arc_iter.Done();
+         arc_iter.Next()) {
+    fst::StdArc arc = arc_iter.Value();
+    if (arc.ilabel == 0) continue;
 
-    float acoustic_cost = -LogLikelihood(frame_logp, arc->input_label);
-    double total_cost = best_tok->cost() + arc->weight + acoustic_cost;
+    float acoustic_cost = -LogLikelihood(frame_logp, arc.ilabel);
+    double total_cost = best_tok->cost() + arc.weight.Value() + acoustic_cost;
 
     if (total_cost + adaptive_beam < next_weight_cutoff) {
       next_weight_cutoff = total_cost + adaptive_beam;
@@ -339,13 +341,14 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
     // So there are only top beam_size toks less than weight_cutoff
     if (from_tok->cost() > weight_cutoff) continue;
 
-    Fst::ArcIterator arc_iter = fst_->IterateArcs(state.hclg_state());
-    const FstArc *arc = nullptr;
-    while ((arc = arc_iter.Next()) != nullptr) {
-      if (arc->input_label == 0) continue;
+    for (fst::ArcIterator<fst::Fst<fst::StdArc>> arc_iter(*fst_, state.hclg_state());
+         !arc_iter.Done();
+         arc_iter.Next()) {
+      fst::StdArc arc = arc_iter.Value();
+      if (arc.ilabel == 0) continue;
 
-      float ac_cost = -LogLikelihood(frame_logp, arc->input_label);
-      double total_cost = from_tok->cost() + arc->weight + ac_cost;
+      float ac_cost = -LogLikelihood(frame_logp, arc.ilabel);
+      double total_cost = from_tok->cost() + arc.weight.Value() + ac_cost;
       
       // Prune the toks whose cost is too high
       if (total_cost > next_weight_cutoff) continue;
@@ -357,15 +360,15 @@ float Decoder::ProcessEmitting(const VectorBase<float> &frame_logp) {
       int32_t lm_state = state.lm_state();
       if (delta_lm_fst_) {
         float lm_weight = 0.0f;
-        lm_state = PropogateLm(state.lm_state(), arc->output_label, &lm_weight);
+        lm_state = PropogateLm(state.lm_state(), arc.olabel, &lm_weight);
         total_cost += lm_weight;
       }
 
       // Create and insert the tok into toks_
-      assert(arc->next_state >= 0 && lm_state >= 0);
+      assert(arc.nextstate >= 0 && lm_state >= 0);
       InsertTok(
-          State(arc->next_state, lm_state),
-          arc->output_label,
+          State(arc.nextstate, lm_state),
+          arc.olabel,
           from_tok->olabel(),
           total_cost);
     }
@@ -393,7 +396,7 @@ Decoder::Hypothesis Decoder::BestPath() {
     double cost = tok->cost();
 
     if (is_end_of_stream_) {
-      cost += fst_->Final(state.hclg_state());
+      cost += fst_->Final(state.hclg_state()).Value();
     }
     if (delta_lm_fst_ && is_end_of_stream_) {
       float lm_weight = delta_lm_fst_->Final(tok->state().lm_state());
@@ -422,7 +425,7 @@ Decoder::Hypothesis Decoder::BestPath() {
   }
 
   weight = best_cost;
-  weight += fst_->Final(best_tok->state().hclg_state());
+  weight += fst_->Final(best_tok->state().hclg_state()).Value();
 
   return Hypothesis(words, weight);
 }

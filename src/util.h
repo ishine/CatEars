@@ -20,9 +20,12 @@
 #define PK_STATUS_STIOERROR 1
 #define PK_STATUS_STCORRUPTED 2
 
+#ifndef DISALLOW_COPY_AND_ASSIGN
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName&);   \
   void operator=(const TypeName&) 
+#endif
+
 
 #define PK_UNUSED(x) (void)(x)
 #define PK_MIN(a, b) ((a) < (b) ? (a) : (b))
