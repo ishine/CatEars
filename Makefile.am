@@ -1,14 +1,14 @@
 ACLOCAL_AMFLAGS = -I m4
 AUTOMAKE_OPTIONS = gnu subdir-objects foreign
 AM_CFLAGS = 
-AM_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11
+AM_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/openfst/include -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11
 AM_LDFLAGS = -pthread 
 LIBS = -lm
 
 bin_PROGRAMS = pocketkaldi
 pocketkaldi_SOURCES = src/main.cc
 
-lib_LIBRARIES = libpocketkaldi.a libgemmlowp.a
+lib_LIBRARIES = libpocketkaldi.a libgemmlowp.a libfst.a
 
 libpocketkaldi_a_SOURCES = src/util.cc \
                            src/fst.cc \
@@ -25,11 +25,24 @@ libpocketkaldi_a_SOURCES = src/util.cc \
                            src/symbol_table.cc \
                            src/ce_stt.cc \
                            src/hashtable.cc \
-                           src/configuration.cc                            
-pocketkaldi_LDADD = libpocketkaldi.a libgemmlowp.a -lstdc++ -lopenblas
+                           src/configuration.cc
+pocketkaldi_LDADD = libpocketkaldi.a libgemmlowp.a libfst.a -lstdc++ -lopenblas
 
 libgemmlowp_a_SOURCES = src/gemmlowp/eight_bit_int_gemm/eight_bit_int_gemm.cc
-libgemmlowp_a_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11 -DGEMMLOWP_AVX2 -march=native
+libgemmlowp_a_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/gemmlowp -g -fPIC -std=c++11
+
+libfst_a_SOURCES = src/openfst/lib/compat.cc \
+                   src/openfst/lib/flags.cc \
+                   src/openfst/lib/fst.cc \
+                   src/openfst/lib/fst-types.cc \
+                   src/openfst/lib/mapped-file.cc \
+                   src/openfst/lib/properties.cc \
+                   src/openfst/lib/symbol-table.cc \
+                   src/openfst/lib/symbol-table-ops.cc \
+                   src/openfst/lib/weight.cc \
+                   src/openfst/lib/util.cc
+libfst_a_CXXFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/openfst/include -g -fPIC -std=c++11
+
 
 
 if ENABLE_TOOLS

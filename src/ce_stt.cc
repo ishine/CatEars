@@ -39,7 +39,7 @@ using pocketkaldi::WaveReader;
 
 
 typedef struct ce_stt_t {
-  pocketkaldi::Fst *fst;
+  fst::ConstFst<fst::StdArc> *fst;
   pocketkaldi::LmFst *large_lm_fst;
   pocketkaldi::DeltaLmFst *delta_lm_fst;
   pocketkaldi::Vector<float> *original_lm;
@@ -116,15 +116,16 @@ Status ReadDeltaLmFst(ce_stt_t *self, const Configuration &conf) {
 
 // Reads the HCLG fst
 Status ReadHclgFst(ce_stt_t *self, const Configuration &conf) {
-  ReadableFile fd;
   std::string filename = conf.GetPathOrElse("fst", "");
   if (filename == "") {
     return Status::Corruption(
         Format("Unable to find key 'fst' in {}", filename));
   }
-  PK_CHECK_STATUS(fd.Open(filename.c_str()));
-  self->fst = new pocketkaldi::Fst();
-  PK_CHECK_STATUS(self->fst->Read(&fd));
+  fst::ConstFst<fst::StdArc> *fst = fst::ConstFst<fst::StdArc>::Read(filename);
+  if (!fst) {
+    return Status::IOError(filename);
+  }
+  self->fst = fst;
 
   return Status::OK();
 }
